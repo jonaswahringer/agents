@@ -5,18 +5,20 @@ Skills I wanted to exist but didn't. Structured, formatted, and specified to my 
 
 ## Installing
 
-Agents/harnesses discover skills in `~/.claude/skills/` (or a project's `.claude/skills/`). Symlink a skill from this repo to make it available:
+Skills live in `~/.agents/skills/`, the harness-agnostic location other agents read from. Claude Code discovers skills in `~/.claude/skills/`, so each skill gets two links: repo → `~/.agents/skills/`, then `~/.agents/skills/` → `~/.claude/skills/`.
 
 ```sh
-ln -s "$(pwd)/<skill>" ~/.claude/skills/<skill>
+ln -sfn "$(pwd)/<skill>" ~/.agents/skills/<skill>
+ln -sfn "../../.agents/skills/<skill>" ~/.claude/skills/<skill>
 ```
 
-Per skill:
+All of them:
 
 ```sh
-ln -s "$(pwd)/proper-commits" ~/.claude/skills/proper-commits
-ln -s "$(pwd)/work-smart-not-hard" ~/.claude/skills/work-smart-not-hard
-ln -s "$(pwd)/nice-to-read" ~/.claude/skills/nice-to-read
+for s in proper-commits work-smart-not-hard nice-to-read; do
+  ln -sfn "$(pwd)/$s" ~/.agents/skills/$s
+  ln -sfn "../../.agents/skills/$s" ~/.claude/skills/$s
+done
 ```
 
 ---
