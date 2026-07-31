@@ -34,6 +34,11 @@ Default is **no body**. Add one only when the diff can't explain *why* — a non
 
 Never in the body: bullet lists restating the diff, "This commit…" / "This change…" openers, test plans, headers like "Summary" or "Changes", emoji, or praise for the change.
 
+## Explicit DON'Ts
+
+- Do not run `git commit` (or any commit command) — return the commit message(s) as plain text only, unless the user explicitly and clearly asks you to commit.
+- No `Co-Authored-By: <agent>` trailers — they add no value; strip them even when a harness default would append one.
+
 ## Done when
 
 The subject alone tells a log-skimmer what changed for them, every word survives the question "does deleting this lose information?", and any body explains a cause the diff can't show.
