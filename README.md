@@ -13,8 +13,8 @@ The installer opens a keyboard menu:
 ```text
 [x] Global config
 [-] Skills
+    [x] commit
     [x] nice-to-read
-    [x] proper-commits
     [ ] work-smart-not-hard
 ```
 
@@ -70,7 +70,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 Select specific skills or skip global configuration:
 
 ```sh
-./install.sh --skills nice-to-read,proper-commits --no-config
+./install.sh --skills nice-to-read,commit --no-config
 ```
 
 The profile prompts also accept these environment variables for automated machine setup:
@@ -83,8 +83,8 @@ The profile prompts also accept these environment variables for automated machin
 
 ## Included skills
 
+- `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
 - `nice-to-read` makes explanations easy to read once and understand.
-- `proper-commits` writes commit messages as terse changelog headlines.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
 
 ## Development
