@@ -1,0 +1,463 @@
+#!/usr/bin/env bash
+
+# macOS still ships Bash 3.2, where `set -u` treats an empty array as an
+# unbound variable. The installer deliberately supports that shell.
+set -eo pipefail
+
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+while [[ -L "$SCRIPT_PATH" ]]; do
+  SCRIPT_DIRECTORY="$(cd -P "$(dirname "$SCRIPT_PATH")" && pwd)"
+  LINK_TARGET="$(readlink "$SCRIPT_PATH")"
+  if [[ "$LINK_TARGET" == /* ]]; then
+    SCRIPT_PATH="$LINK_TARGET"
+  else
+    SCRIPT_PATH="$SCRIPT_DIRECTORY/$LINK_TARGET"
+  fi
+done
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+CONFIG_DIR="${AGENTS_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/agents}"
+PROFILE_DIR="$CONFIG_DIR/profile"
+SELECTED_FILE="$CONFIG_DIR/selected-skills"
+GLOBAL_STATE_FILE="$CONFIG_DIR/global-config"
+AGENTS_DIR="${AGENTS_HOME:-$HOME/.agents}"
+CLAUDE_DIR="${CLAUDE_HOME:-$HOME/.claude}"
+CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
+FORCE=0
+NON_INTERACTIVE=0
+CONFIG_SELECTED=1
+SELECTED=()
+SKILLS=()
+
+usage() {
+  cat <<'EOF'
+agents manages shared instructions and skills for coding agents.
+
+Usage:
+  agents update              Update the tool and selected skills
+  agents configure           Edit the saved global configuration
+  agents skills              Choose installed skills
+  agents doctor              Check the current installation
+  agents help
+
+Installer options:
+  --all                      Select global config and every skill
+  --skills NAME,NAME         Select specific skills
+  --no-config                Do not create global config
+  --non-interactive          Do not open the keyboard menu
+  --force                    Back up and replace conflicting files
+EOF
+}
+
+die() {
+  echo "agents: $*" >&2
+  exit 1
+}
+
+discover_skills() {
+  SKILLS=()
+  local directory
+  for directory in "$ROOT"/skills/*; do
+    if [[ -f "$directory/SKILL.md" ]]; then
+      SKILLS+=("$(basename "$directory")")
+    fi
+  done
+}
+
+has_selected() {
+  local wanted="$1" item
+  for item in "${SELECTED[@]}"; do
+    [[ "$item" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+add_selected() {
+  has_selected "$1" || SELECTED+=("$1")
+}
+
+remove_selected() {
+  local wanted="$1" item
+  local next=()
+  for item in "${SELECTED[@]}"; do
+    [[ "$item" == "$wanted" ]] || next+=("$item")
+  done
+  SELECTED=("${next[@]}")
+}
+
+select_all_skills() {
+  SELECTED=()
+  local skill
+  for skill in "${SKILLS[@]}"; do
+    SELECTED+=("$skill")
+  done
+}
+
+load_selected() {
+  SELECTED=()
+  if [[ -f "$SELECTED_FILE" ]]; then
+    while IFS= read -r skill; do
+      [[ -n "$skill" ]] && add_selected "$skill"
+    done < "$SELECTED_FILE"
+  fi
+}
+
+load_global_state() {
+  if [[ -f "$GLOBAL_STATE_FILE" && "$(<"$GLOBAL_STATE_FILE")" == "disabled" ]]; then
+    CONFIG_SELECTED=0
+  else
+    CONFIG_SELECTED=1
+  fi
+}
+
+save_global_state() {
+  mkdir -p "$CONFIG_DIR"
+  if [[ $CONFIG_SELECTED -eq 1 ]]; then
+    printf 'enabled\n' > "$GLOBAL_STATE_FILE"
+  else
+    printf 'disabled\n' > "$GLOBAL_STATE_FILE"
+  fi
+}
+
+save_selected() {
+  mkdir -p "$CONFIG_DIR"
+  : > "$SELECTED_FILE"
+  local skill
+  for skill in "${SELECTED[@]}"; do
+    printf '%s\n' "$skill" >> "$SELECTED_FILE"
+  done
+}
+
+all_skills_selected() {
+  [[ ${#SKILLS[@]} -gt 0 && ${#SELECTED[@]} -eq ${#SKILLS[@]} ]]
+}
+
+render_menu() {
+  local with_config="$1" cursor="$2" index=0 prefix mark skill
+  if [[ "$with_config" == 1 ]]; then
+    prefix="  "; [[ $cursor -eq $index ]] && prefix="> "
+    mark=" "; [[ $CONFIG_SELECTED -eq 1 ]] && mark="x"
+    printf '%s[%s] Global config\n' "$prefix" "$mark"
+    index=$((index + 1))
+  fi
+
+  prefix="  "; [[ $cursor -eq $index ]] && prefix="> "
+  if all_skills_selected; then
+    mark="x"
+  elif [[ ${#SELECTED[@]} -gt 0 ]]; then
+    mark="-"
+  else
+    mark=" "
+  fi
+  printf '%s[%s] Skills\n' "$prefix" "$mark"
+  index=$((index + 1))
+
+  for skill in "${SKILLS[@]}"; do
+    prefix="      "; [[ $cursor -eq $index ]] && prefix="    > "
+    mark=" "; has_selected "$skill" && mark="x"
+    printf '%s[%s] %s\n' "$prefix" "$mark" "$skill"
+    index=$((index + 1))
+  done
+}
+
+interactive_menu() {
+  local with_config="$1" cursor=0 key count offset skill_index
+  [[ -r /dev/tty && -w /dev/tty ]] || die "interactive setup needs a terminal; use --all or --skills"
+  count=$((${#SKILLS[@]} + 1 + with_config))
+
+  while true; do
+    printf '\033[2J\033[H' > /dev/tty
+    printf 'Choose what agents should manage.\n\n' > /dev/tty
+    render_menu "$with_config" "$cursor" > /dev/tty
+    printf '\nUse ↑/↓ to move, Space to toggle, and Enter to continue.\n' > /dev/tty
+
+    IFS= read -rsn1 key < /dev/tty
+    if [[ "$key" == $'\033' ]]; then
+      IFS= read -rsn2 key < /dev/tty || true
+      [[ "$key" == "[A" ]] && cursor=$(((cursor - 1 + count) % count))
+      [[ "$key" == "[B" ]] && cursor=$(((cursor + 1) % count))
+    elif [[ "$key" == " " ]]; then
+      offset=0
+      if [[ "$with_config" == 1 ]]; then
+        if [[ $cursor -eq 0 ]]; then
+          CONFIG_SELECTED=$((1 - CONFIG_SELECTED))
+          continue
+        fi
+        offset=1
+      fi
+      if [[ $cursor -eq $offset ]]; then
+        if all_skills_selected; then SELECTED=(); else select_all_skills; fi
+      else
+        skill_index=$((cursor - offset - 1))
+        if has_selected "${SKILLS[$skill_index]}"; then
+          remove_selected "${SKILLS[$skill_index]}"
+        else
+          add_selected "${SKILLS[$skill_index]}"
+        fi
+      fi
+    elif [[ -z "$key" ]]; then
+      printf '\033[2J\033[H' > /dev/tty
+      return
+    elif [[ "$key" == "q" ]]; then
+      die "setup cancelled"
+    fi
+  done
+}
+
+read_profile_value() {
+  local name="$1" prompt="$2" fallback="$3" current answer
+  local path="$PROFILE_DIR/$name"
+  current="$fallback"
+  [[ -f "$path" ]] && current="$(<"$path")"
+
+  if [[ $NON_INTERACTIVE -eq 1 ]]; then
+    case "$name" in
+      about-me) answer="${AGENTS_PROFILE_ABOUT_ME:-$current}" ;;
+      machine) answer="${AGENTS_PROFILE_MACHINE:-$current}" ;;
+      network) answer="${AGENTS_PROFILE_NETWORK:-$current}" ;;
+      sync) answer="${AGENTS_PROFILE_SYNC:-$current}" ;;
+      tooling) answer="${AGENTS_PROFILE_TOOLING:-$current}" ;;
+    esac
+  else
+    printf '%s\nCurrent: %s\n> ' "$prompt" "$current" > /dev/tty
+    IFS= read -r answer < /dev/tty
+    [[ -n "$answer" ]] || answer="$current"
+  fi
+  printf '%s\n' "$answer" > "$path"
+}
+
+confirm_replace() {
+  local target="$1" answer
+  [[ $FORCE -eq 1 ]] && return 0
+  [[ $NON_INTERACTIVE -eq 0 ]] || return 1
+  printf '%s already exists. Back it up and replace it? [y/N] ' "$target" > /dev/tty
+  IFS= read -r answer < /dev/tty
+  [[ "$answer" == "y" || "$answer" == "Y" ]]
+}
+
+prepare_generated_target() {
+  local target="$1"
+  if [[ -e "$target" || -L "$target" ]]; then
+    if [[ -f "$target" ]] && grep -q 'Managed by agents' "$target" 2>/dev/null; then
+      return 0
+    fi
+    if ! confirm_replace "$target"; then
+      echo "Skipped $target; it was not created by agents." >&2
+      return 1
+    fi
+    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+  fi
+}
+
+render_template() {
+  local template="$1" target="$2"
+  mkdir -p "$(dirname "$target")"
+  prepare_generated_target "$target" || return 0
+  awk -v profile="$PROFILE_DIR" '
+    function emit(path, line) {
+      while ((getline line < path) > 0) print line
+      close(path)
+    }
+    $0 == "{{ABOUT_ME}}" { emit(profile "/about-me"); next }
+    $0 == "{{MACHINE}}" { emit(profile "/machine"); next }
+    $0 == "{{NETWORK}}" { emit(profile "/network"); next }
+    $0 == "{{SYNC}}" { emit(profile "/sync"); next }
+    $0 == "{{TOOLING}}" { emit(profile "/tooling"); next }
+    { print }
+  ' "$template" > "$target"
+}
+
+install_codex_config_link() {
+  local target="$CODEX_DIR/AGENTS.md" source="$AGENTS_DIR/AGENTS.md"
+  mkdir -p "$CODEX_DIR"
+  if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then return; fi
+  if [[ -e "$target" || -L "$target" ]]; then
+    if ! confirm_replace "$target"; then
+      echo "Skipped $target; it was not created by agents." >&2
+      return
+    fi
+    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+  fi
+  ln -s "$source" "$target"
+}
+
+configure_global() {
+  umask 077
+  mkdir -p "$PROFILE_DIR"
+  if [[ $NON_INTERACTIVE -eq 0 ]]; then
+    printf '\nTell agents enough to work well on this machine. Press Enter to keep a current value.\n\n' > /dev/tty
+  fi
+  read_profile_value about-me "What should agents know about you, your role, and your experience?" "Add your role, experience, and common projects."
+  read_profile_value machine "What machine is this, and what work should agents do here?" "Add this machine's name, operating system, and role."
+  read_profile_value network "What can this machine and other machines reach over the network?" "Add reachable hosts, services, and any access limits."
+  read_profile_value sync "How should work move between this machine and your other machines?" "Add your Git, file sync, or remote development workflow."
+  read_profile_value tooling "Which tools, languages, package managers, and conventions should agents use?" "Add your preferred tools and workflow rules."
+
+  render_template "$ROOT/templates/AGENTS.md" "$AGENTS_DIR/AGENTS.md"
+  render_template "$ROOT/templates/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
+  install_codex_config_link
+}
+
+safe_link() {
+  local source="$1" target="$2" current
+  mkdir -p "$(dirname "$target")"
+  if [[ -L "$target" ]]; then
+    current="$(readlink "$target")"
+    [[ "$current" == "$source" ]] && return 0
+    if ! confirm_replace "$target"; then
+      echo "Skipped $target because it points somewhere else." >&2
+      return 0
+    fi
+    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    ln -s "$source" "$target"
+  elif [[ -e "$target" ]]; then
+    if ! confirm_replace "$target"; then
+      echo "Skipped $target because it already exists." >&2
+      return 0
+    fi
+    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    ln -s "$source" "$target"
+  else
+    ln -s "$source" "$target"
+  fi
+}
+
+remove_old_skill_links() {
+  local skill target expected index
+  [[ -f "$SELECTED_FILE" ]] || return 0
+  while IFS= read -r skill; do
+    [[ -n "$skill" ]] || continue
+    has_selected "$skill" && continue
+    index=0
+    for target in "$AGENTS_DIR/skills/$skill" "$CLAUDE_DIR/skills/$skill" "$CODEX_DIR/skills/$skill"; do
+      if [[ $index -eq 0 ]]; then
+        expected="$ROOT/skills/$skill"
+      else
+        expected="$AGENTS_DIR/skills/$skill"
+      fi
+      if [[ -L "$target" && "$(readlink "$target")" == "$expected" ]]; then
+        rm "$target"
+      fi
+      index=$((index + 1))
+    done
+  done < "$SELECTED_FILE"
+}
+
+sync_skills() {
+  local skill source
+  remove_old_skill_links
+  for skill in "${SELECTED[@]}"; do
+    source="$ROOT/skills/$skill"
+    if [[ ! -f "$source/SKILL.md" ]]; then
+      echo "Selected skill '$skill' no longer exists; skipping it." >&2
+      continue
+    fi
+    safe_link "$source" "$AGENTS_DIR/skills/$skill"
+    safe_link "$AGENTS_DIR/skills/$skill" "$CLAUDE_DIR/skills/$skill"
+    safe_link "$AGENTS_DIR/skills/$skill" "$CODEX_DIR/skills/$skill"
+  done
+  save_selected
+}
+
+parse_install_options() {
+  local skill_list="" option skill
+  while [[ $# -gt 0 ]]; do
+    option="$1"
+    case "$option" in
+      --all) select_all_skills; CONFIG_SELECTED=1; NON_INTERACTIVE=1 ;;
+      --skills) shift; [[ $# -gt 0 ]] || die "--skills needs a comma-separated list"; skill_list="$1"; NON_INTERACTIVE=1 ;;
+      --no-config) CONFIG_SELECTED=0 ;;
+      --non-interactive) NON_INTERACTIVE=1 ;;
+      --force) FORCE=1 ;;
+      *) die "unknown option: $option" ;;
+    esac
+    shift
+  done
+  if [[ -n "$skill_list" ]]; then
+    SELECTED=()
+    old_ifs="$IFS"; IFS=','; read -ra requested <<< "$skill_list"; IFS="$old_ifs"
+    for skill in "${requested[@]}"; do
+      [[ -f "$ROOT/skills/$skill/SKILL.md" ]] || die "unknown skill: $skill"
+      add_selected "$skill"
+    done
+  fi
+}
+
+install_command() {
+  discover_skills
+  load_selected
+  load_global_state
+  parse_install_options "$@"
+  if [[ $NON_INTERACTIVE -eq 0 ]]; then interactive_menu 1; fi
+  [[ $CONFIG_SELECTED -eq 0 ]] || configure_global
+  save_global_state
+  sync_skills
+  echo
+  echo "agents is installed. Run 'agents doctor' to check the setup."
+}
+
+skills_command() {
+  discover_skills
+  load_selected
+  if [[ "${1:-}" == "--all" ]]; then
+    select_all_skills
+  elif [[ "${1:-}" == "--none" ]]; then
+    SELECTED=()
+  elif [[ $# -gt 0 ]]; then
+    die "usage: agents skills [--all|--none]"
+  else
+    interactive_menu 0
+  fi
+  sync_skills
+  echo "Selected skills updated."
+}
+
+doctor_command() {
+  local failed=0 skill path
+  load_global_state
+  if [[ $CONFIG_SELECTED -eq 1 ]]; then
+    for path in "$AGENTS_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"; do
+      if [[ -e "$path" ]]; then echo "ok  $path"; else echo "missing  $path"; failed=1; fi
+    done
+  else
+    echo "skip  global config was not selected"
+  fi
+  discover_skills
+  load_selected
+  for skill in "${SELECTED[@]}"; do
+    path="$AGENTS_DIR/skills/$skill"
+    if [[ -e "$path/SKILL.md" ]]; then echo "ok  $skill"; else echo "missing  $skill"; failed=1; fi
+  done
+  return "$failed"
+}
+
+update_command() {
+  local bootstrap tmp
+  if [[ -n "${AGENTS_SOURCE_DIR:-}" ]]; then
+    bootstrap="$AGENTS_SOURCE_DIR/install.sh"
+    [[ -f "$bootstrap" ]] || die "AGENTS_SOURCE_DIR does not contain install.sh"
+    bash "$bootstrap" --update
+  else
+    tmp="$(mktemp "${TMPDIR:-/tmp}/agents-bootstrap.XXXXXX")"
+    trap 'rm -f "$tmp"' EXIT
+    curl -fsSL "https://raw.githubusercontent.com/${AGENTS_REPOSITORY:-jonaswahringer/agents}/${AGENTS_REF:-main}/install.sh" -o "$tmp"
+    bash "$tmp" --update
+  fi
+}
+
+reconcile_command() {
+  discover_skills
+  load_selected
+  sync_skills
+}
+
+case "${1:-help}" in
+  _install) shift; install_command "$@" ;;
+  _reconcile) shift; reconcile_command "$@" ;;
+  _menu_snapshot) shift; discover_skills; load_selected; load_global_state; render_menu 1 -1 ;;
+  update) shift; update_command "$@" ;;
+  configure) shift; discover_skills; load_selected; parse_install_options "$@"; CONFIG_SELECTED=1; configure_global; save_global_state ;;
+  skills) shift; skills_command "$@" ;;
+  doctor) shift; doctor_command "$@" ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 1 ;;
+esac

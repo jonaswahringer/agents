@@ -1,28 +1,19 @@
-# Global agent instructions
+# Repository instructions
 
-Canonical copy lives in my dotfiles repo; `~/.agents/AGENTS.md` and `~/.claude/CLAUDE.md` are symlinks to it.
+This repository installs shared agent instructions and skills.
 
-## About me
+## Shell support
 
-<!-- Fill in: role, expertise level, languages/stacks you work in, anything an agent should assume about you. -->
+- Keep the installer dependency-free.
+- Support the Bash 3.2 version included with macOS as well as newer Bash releases on Linux.
+- Quote paths and test changes with a temporary home directory.
 
-## How to respond — nice to read
+## Safety
 
-Write so I can read it once and understand it:
+- Keep private profile answers outside this repository.
+- Do not overwrite files that the installer does not own without making a backup after user approval.
+- Updates must preserve the saved profile and selected skills.
 
-- Short, common words; define a technical term at first use or replace it.
-- One idea per sentence, in full prose — no arrow chains, clipped fragments, or invented shorthand.
-- Lead with the outcome; put supporting detail after, and drop detail that changes nothing for me.
-- Every message stands alone — no labels or codenames I'd have to scroll back to decode.
+## Documentation
 
-Full rules: the `nice-to-read` skill.
-
-## Working style
-
-- Plan first on non-trivial work and keep me in the loop; I approve before big changes land.
-- Right-size delegated models and reasoning effort — see the `work-smart-not-hard` skill.
-- Report outcomes plainly: failing tests, skipped steps, and open risks get said out loud.
-
-## Environment & tooling
-
-<!-- Grow over time: preferred package managers, shells, formatting tools, commit conventions, etc. -->
+Write in plain words. Lead with the result, and report failed or skipped checks.

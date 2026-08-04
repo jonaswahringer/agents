@@ -1,30 +1,94 @@
-# skills
-Skills I wanted to exist but didn't. Structured, formatted, and specified to my own liking.
+# agents
 
----
+Set up shared instructions and skills for coding agents from one interactive installer.
 
-## Installing
-
-Skills live in `~/.agents/skills/`, the harness-agnostic location other agents read from. Claude Code discovers skills in `~/.claude/skills/`, so each skill gets two links: repo → `~/.agents/skills/`, then `~/.agents/skills/` → `~/.claude/skills/`.
+## Install
 
 ```sh
-ln -sfn "$(pwd)/<skill>" ~/.agents/skills/<skill>
-ln -sfn "../../.agents/skills/<skill>" ~/.claude/skills/<skill>
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/main/install.sh)"
 ```
 
-All of them:
+The installer opens a keyboard menu:
+
+```text
+[x] Global config
+[-] Skills
+    [x] nice-to-read
+    [x] proper-commits
+    [ ] work-smart-not-hard
+```
+
+Use the arrow keys to move, Space to toggle an item, and Enter to install. Toggling `Skills` selects or clears every skill below it. A `[-]` mark means that only some skills are selected.
+
+The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
+
+## What gets installed
+
+The managed source lives at `~/.local/share/agents/`, and the `agents` command is linked into `~/.local/bin/`.
+
+Global instructions are written to:
+
+- `~/.agents/AGENTS.md`
+- `~/.claude/CLAUDE.md`
+- `~/.codex/AGENTS.md`, linked to the shared `AGENTS.md`
+
+Selected skills are linked into the skill directories for agents, Claude Code, and Codex. Existing files that the installer does not own are skipped unless you approve a backup and replacement.
+
+Make sure `~/.local/bin` is in your `PATH` so the command is available in new shells.
+
+## Update or change the setup
 
 ```sh
-for s in proper-commits work-smart-not-hard nice-to-read; do
-  ln -sfn "$(pwd)/$s" ~/.agents/skills/$s
-  ln -sfn "../../.agents/skills/$s" ~/.claude/skills/$s
-done
+agents update
+agents configure
+agents skills
+agents doctor
 ```
 
----
+`agents update` downloads the newest repository version and restores the saved skill selection. It does not ask for the global configuration again or regenerate those files.
 
-### Skills I still want
+Run `agents configure` when you want to change the saved answers. Run `agents skills` to reopen the nested skill menu.
 
-- teach — a customized matt-pocock/teach skill that is based on the knowledge-tree idea and a improved EITMLIF-variant
-- get-it-going — for deep thinking sessions, where the agent focuses on getting the most out of the human as opposed to the other way around
-- plan — the agent encourages the human to think as much as possible, creating a plan only from all the snippets/articles/paragraphs the human writes themselves
+## Non-interactive install
+
+Install everything without opening the menu:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/main/install.sh)" -- --all
+```
+
+Select specific skills or skip global configuration:
+
+```sh
+./install.sh --skills nice-to-read,proper-commits --no-config
+```
+
+The profile prompts also accept these environment variables for automated machine setup:
+
+- `AGENTS_PROFILE_ABOUT_ME`
+- `AGENTS_PROFILE_MACHINE`
+- `AGENTS_PROFILE_NETWORK`
+- `AGENTS_PROFILE_SYNC`
+- `AGENTS_PROFILE_TOOLING`
+
+## Included skills
+
+- `nice-to-read` makes explanations easy to read once and understand.
+- `proper-commits` writes commit messages as terse changelog headlines.
+- `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
+
+## Development
+
+Run the dependency-free test suite with:
+
+```sh
+./tests/test.sh
+```
+
+Set `AGENTS_SOURCE_DIR` to install or update from a local checkout instead of GitHub.
+
+## Skills still wanted
+
+- `teach` — a customized Matt Pocock teaching skill based on the knowledge-tree idea and an improved EITMLIF variant.
+- `get-it-going` — a deep-thinking skill that focuses on getting the most out of the human.
+- `plan` — a skill that builds a plan from snippets, articles, and paragraphs written by the human.
