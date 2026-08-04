@@ -12,6 +12,7 @@ This repository installs shared agent instructions and skills.
 
 - Keep private profile answers outside this repository.
 - Do not overwrite files that the installer does not own without making a backup after user approval.
+- Deduplicate equivalent config files and links without discarding unique instructions.
 - Updates must preserve the saved profile and selected skills.
 
 ## Documentation

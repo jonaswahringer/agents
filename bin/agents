@@ -234,24 +234,74 @@ confirm_replace() {
   [[ "$answer" == "y" || "$answer" == "Y" ]]
 }
 
+backup_target() {
+  local target="$1" backup suffix=0
+  backup="$target.backup-$(date +%Y%m%d%H%M%S)"
+  while [[ -e "$backup" || -L "$backup" ]]; do
+    suffix=$((suffix + 1))
+    backup="$target.backup-$(date +%Y%m%d%H%M%S)-$suffix"
+  done
+  mv "$target" "$backup"
+  printf '%s\n' "$backup"
+}
+
+resolve_existing_path() {
+  local current="$1" directory target hops=0
+  while [[ -L "$current" ]]; do
+    hops=$((hops + 1))
+    [[ $hops -le 32 ]] || return 1
+    directory="$(cd -P "$(dirname "$current")" 2>/dev/null && pwd)" || return 1
+    target="$(readlink "$current")"
+    if [[ "$target" == /* ]]; then
+      current="$target"
+    else
+      current="$directory/$target"
+    fi
+  done
+  [[ -e "$current" ]] || return 1
+  directory="$(cd -P "$(dirname "$current")" 2>/dev/null && pwd)" || return 1
+  printf '%s/%s\n' "$directory" "$(basename "$current")"
+}
+
+link_points_to() {
+  local target="$1" source="$2" resolved_target resolved_source
+  [[ -L "$target" ]] || return 1
+  resolved_target="$(resolve_existing_path "$target")" || return 1
+  resolved_source="$(resolve_existing_path "$source")" || return 1
+  [[ "$resolved_target" == "$resolved_source" ]]
+}
+
 prepare_generated_target() {
   local target="$1"
   if [[ -e "$target" || -L "$target" ]]; then
-    if [[ -f "$target" ]] && grep -q 'Managed by agents' "$target" 2>/dev/null; then
+    if [[ -d "$target" && ! -L "$target" ]]; then
+      echo "agents: $target is a directory; move it before installing global config" >&2
+      return 2
+    fi
+    if [[ -f "$target" && ! -L "$target" ]] && grep -q 'Managed by agents' "$target" 2>/dev/null; then
       return 0
     fi
     if ! confirm_replace "$target"; then
       echo "Skipped $target; it was not created by agents." >&2
-      return 1
+      return 10
     fi
-    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    backup_target "$target" >/dev/null
   fi
 }
 
 render_template() {
-  local template="$1" target="$2"
+  local template="$1" target="$2" prepare_status
   mkdir -p "$(dirname "$target")"
-  prepare_generated_target "$target" || return 0
+  if prepare_generated_target "$target"; then
+    prepare_status=0
+  else
+    prepare_status=$?
+  fi
+  if [[ $prepare_status -eq 10 ]]; then
+    return 0
+  elif [[ $prepare_status -ne 0 ]]; then
+    return "$prepare_status"
+  fi
   awk -v profile="$PROFILE_DIR" '
     function emit(path, line) {
       while ((getline line < path) > 0) print line
@@ -266,18 +316,56 @@ render_template() {
   ' "$template" > "$target"
 }
 
-install_codex_config_link() {
-  local target="$CODEX_DIR/AGENTS.md" source="$AGENTS_DIR/AGENTS.md"
-  mkdir -p "$CODEX_DIR"
-  if [[ -L "$target" && "$(readlink "$target")" == "$source" ]]; then return; fi
+install_shared_config_link() {
+  local source="$1" target="$2" backup
+  mkdir -p "$(dirname "$target")"
+
+  if link_points_to "$target" "$source"; then
+    return 0
+  fi
+
+  if [[ -d "$target" && ! -L "$target" ]]; then
+    echo "agents: $target is a directory; move it before installing the shared config link" >&2
+    return 2
+  fi
+
+  if [[ -f "$target" && ! -L "$target" ]] && cmp -s "$target" "$source"; then
+    rm "$target"
+    ln -s "$source" "$target"
+    echo "Deduplicated $target; it now uses the shared config."
+    return 0
+  fi
+
+  if [[ -f "$target" && ! -L "$target" ]] && grep -q 'Managed by agents' "$target" 2>/dev/null; then
+    backup="$(backup_target "$target")"
+    ln -s "$source" "$target"
+    echo "Migrated $target to the shared config; backup: $backup"
+    return 0
+  fi
+
   if [[ -e "$target" || -L "$target" ]]; then
     if ! confirm_replace "$target"; then
-      echo "Skipped $target; it was not created by agents." >&2
-      return
+      if [[ -L "$target" ]]; then
+        echo "Kept $target because it points to a different config." >&2
+      else
+        echo "Kept $target because it contains separate instructions." >&2
+      fi
+      return 0
     fi
-    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    backup="$(backup_target "$target")"
+    ln -s "$source" "$target"
+    echo "Linked $target to the shared config; backup: $backup"
+    return 0
   fi
+
   ln -s "$source" "$target"
+}
+
+install_global_config_links() {
+  local source="$AGENTS_DIR/AGENTS.md"
+  [[ -f "$source" ]] || return 0
+  install_shared_config_link "$source" "$CLAUDE_DIR/CLAUDE.md"
+  install_shared_config_link "$source" "$CODEX_DIR/AGENTS.md"
 }
 
 configure_global() {
@@ -293,51 +381,54 @@ configure_global() {
   read_profile_value tooling "Which tools, languages, package managers, and conventions should agents use?" "Add your preferred tools and workflow rules."
 
   render_template "$ROOT/templates/AGENTS.md" "$AGENTS_DIR/AGENTS.md"
-  render_template "$ROOT/templates/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
-  install_codex_config_link
+  install_global_config_links
 }
 
 safe_link() {
-  local source="$1" target="$2" current
+  local source="$1" target="$2" backup
   mkdir -p "$(dirname "$target")"
-  if [[ -L "$target" ]]; then
-    current="$(readlink "$target")"
-    [[ "$current" == "$source" ]] && return 0
+  if link_points_to "$target" "$source"; then
+    return 0
+  elif [[ -L "$target" ]]; then
     if ! confirm_replace "$target"; then
       echo "Skipped $target because it points somewhere else." >&2
       return 0
     fi
-    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    backup="$(backup_target "$target")"
     ln -s "$source" "$target"
+    echo "Replaced $target; backup: $backup"
   elif [[ -e "$target" ]]; then
+    if [[ -d "$target" ]]; then
+      echo "agents: $target is a directory; move it before installing this skill" >&2
+      return 2
+    fi
     if ! confirm_replace "$target"; then
       echo "Skipped $target because it already exists." >&2
       return 0
     fi
-    mv "$target" "$target.backup-$(date +%Y%m%d%H%M%S)"
+    backup="$(backup_target "$target")"
     ln -s "$source" "$target"
+    echo "Replaced $target; backup: $backup"
   else
     ln -s "$source" "$target"
   fi
 }
 
 remove_old_skill_links() {
-  local skill target expected index
+  local skill target expected
   [[ -f "$SELECTED_FILE" ]] || return 0
   while IFS= read -r skill; do
     [[ -n "$skill" ]] || continue
     has_selected "$skill" && continue
-    index=0
-    for target in "$AGENTS_DIR/skills/$skill" "$CLAUDE_DIR/skills/$skill" "$CODEX_DIR/skills/$skill"; do
-      if [[ $index -eq 0 ]]; then
+    for target in "$CLAUDE_DIR/skills/$skill" "$CODEX_DIR/skills/$skill" "$AGENTS_DIR/skills/$skill"; do
+      if [[ "$target" == "$AGENTS_DIR/skills/$skill" ]]; then
         expected="$ROOT/skills/$skill"
       else
         expected="$AGENTS_DIR/skills/$skill"
       fi
-      if [[ -L "$target" && "$(readlink "$target")" == "$expected" ]]; then
+      if link_points_to "$target" "$expected"; then
         rm "$target"
       fi
-      index=$((index + 1))
     done
   done < "$SELECTED_FILE"
 }
@@ -412,11 +503,21 @@ skills_command() {
 }
 
 doctor_command() {
-  local failed=0 skill path
+  local failed=0 skill path source
   load_global_state
   if [[ $CONFIG_SELECTED -eq 1 ]]; then
-    for path in "$AGENTS_DIR/AGENTS.md" "$CLAUDE_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"; do
-      if [[ -e "$path" ]]; then echo "ok  $path"; else echo "missing  $path"; failed=1; fi
+    source="$AGENTS_DIR/AGENTS.md"
+    if [[ -f "$source" ]]; then echo "ok  $source"; else echo "missing  $source"; failed=1; fi
+    for path in "$CLAUDE_DIR/CLAUDE.md" "$CODEX_DIR/AGENTS.md"; do
+      if link_points_to "$path" "$source"; then
+        echo "ok  $path -> $source"
+      elif [[ -e "$path" || -L "$path" ]]; then
+        echo "conflict  $path does not use the shared config"
+        failed=1
+      else
+        echo "missing  $path"
+        failed=1
+      fi
     done
   else
     echo "skip  global config was not selected"
@@ -447,6 +548,11 @@ update_command() {
 reconcile_command() {
   discover_skills
   load_selected
+  load_global_state
+  if [[ $CONFIG_SELECTED -eq 1 ]]; then
+    NON_INTERACTIVE=1
+    install_global_config_links
+  fi
   sync_skills
 }
 
