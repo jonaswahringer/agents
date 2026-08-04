@@ -24,6 +24,10 @@ These instructions apply on every project unless a project gives more specific g
 
 {{TOOLING}}
 
+## Commits
+
+Show the commit message and ask before running `git commit`. Ask again before pushing, tagging, or amending a commit that already exists on a remote. Write the message as one headline that says what changed for the reader, and do not add `Co-Authored-By` trailers for agents.
+
 ## How to respond
 
 Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks.
