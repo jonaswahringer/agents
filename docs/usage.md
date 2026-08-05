@@ -25,7 +25,12 @@ at cost, while your subscription quota is shared across machines and surfaces.
 | --- | --- | --- |
 | Claude Code | `api.anthropic.com/api/oauth/usage` | login keychain, falling back to `~/.claude/.credentials.json` |
 | Codex | `chatgpt.com/backend-api/wham/usage` | `~/.codex/auth.json` |
-| Cursor | `cursor.com/api/dashboard/*` | login keychain (`cursor-access-token`, written by `cursor-agent`), falling back to the editor's `state.vscdb` |
+| Cursor | `cursor.com/api/usage-summary` and `api/auth/stripe` | login keychain (`cursor-access-token`, written by `cursor-agent`), falling back to the editor's `state.vscdb` |
+
+All three are queried at once, in threads. On a terminal the layout is drawn
+immediately with a spinner per provider, and each block is replaced the moment that
+vendor answers, so the slowest one no longer holds up the other two. Piped output and
+`--json` skip the animation and print once everything has landed.
 
 ## Things that will bite you
 
@@ -40,21 +45,25 @@ at cost, while your subscription quota is shared across machines and surfaces.
 - **The 5-hour window rolls from your first message**, not from a clock boundary.
 - **Per-model weekly buckets exhaust before the aggregate.** You can sit at 27% of your
   overall weekly quota and still be locked out of one model.
-- **Cursor is measured in dollars, not percent.** It reports usage-based spend against a
-  hard limit, so it is shown in dollars and is not comparable to Claude's or Codex's
-  message quotas. The percentage in `--json` is derived, not authoritative.
-- **`get-aggregated-usage-events` does not answer "how much have I spent".** It reports
-  plan-*included* cost, which is never billed against the hard limit. The spend figure
-  has to be summed from `get-filtered-usage-events`, counting only
-  `USAGE_EVENT_KIND_USAGE_BASED` and only since the cycle start. Mixing the two
-  overstates spend badly — included cost runs into the hundreds of dollars.
-- **Cursor's dashboard endpoints reject POSTs without an `Origin: https://cursor.com`
-  header**, answering 403 "Invalid origin for state-changing request".
-- **Cursor's monthly-invoice endpoint reports the *next* billing period**, not the
-  current one. The cycle anchor comes from `startOfMonth` on the legacy usage endpoint.
+- **A Cursor plan is two pools, not one.** `individualUsage.plan` on
+  `api/usage-summary` carries `autoPercentUsed` (Cursor's own models — Grok, Composer)
+  and `apiPercentUsed` (everything else, the "at least $20 of API usage" the plan page
+  advertises). These two percentages are what the dashboard's bars show, so they are
+  what this tool reports. A user can be at 1% of one pool and 100% of the other.
+- **Do not subtract `used` from `limit` on `usage-summary`.** They belong to different
+  pools: `limit: 2000` is the $20 API allowance in cents, while `used: 432` is spend
+  charged mostly against the far larger Cursor-models pool (~$300 on Pro, if you back
+  it out of `autoPercentUsed`). `remaining` is that same bad subtraction, served
+  pre-computed. Reading the pair as one quota reported a barely-touched plan as
+  three-quarters spent.
+- **`get-hard-limit` is not the Cursor plan limit either.** It returns the on-demand
+  spending cap — what you allow *after* both pools run out, often a token amount like
+  $1. It is `individualUsage.onDemand` on the same response, in cents, and is the one
+  Cursor figure genuinely denominated in dollars. Shown only once something has been
+  charged to it.
 - **The `cursor-agent` CLI is enough for Cursor.** The desktop editor does not need to be
   installed; the CLI writes a usable token to the keychain.
 
-## Verified on 2026-08-05
+## Verified on 2026-08-06
 
 All three providers confirmed live against real accounts on the Mac mini.

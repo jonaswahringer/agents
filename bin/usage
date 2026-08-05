@@ -6,9 +6,12 @@ numbers match what the vendor thinks -- including usage from other machines.
 """
 
 import argparse
+import concurrent.futures as futures
 import datetime as dt
+import itertools
 import json
 import os
+import shutil
 import subprocess
 import sqlite3
 import sys
@@ -32,6 +35,8 @@ def get_json(url, headers):
         raise Unavailable(f"HTTP {e.code}: {detail}") from e
     except OSError as e:
         raise Unavailable(str(e)) from e
+    except ValueError as e:  # an error page where JSON was promised
+        raise Unavailable(f"unreadable reply from {url}: {e}") from e
 
 
 class Window:
@@ -45,6 +50,14 @@ class Window:
         # unit and the percentage is derived.
         self.used_dollars = None
         self.limit_dollars = None
+
+    @classmethod
+    def spend(cls, label, used_cents, limit_cents, resets_at):
+        """A window measured in money rather than in messages."""
+        window = cls(label, round(100 * used_cents / limit_cents), resets_at)
+        window.used_dollars = used_cents / 100
+        window.limit_dollars = limit_cents / 100
+        return window
 
     def as_dict(self):
         return {
@@ -160,7 +173,7 @@ def codex_usage():
             continue
         secs = w.get("limit_window_seconds")
         windows.append(Window(
-            f"{label} ({describe_window(secs)})" if secs else label,
+            describe_window(secs) if secs else label,
             w.get("used_percent"),
             reset_from_epoch(w.get("reset_at")) or reset_from_offset(w.get("reset_after_seconds")),
         ))
@@ -206,86 +219,51 @@ def cursor_credentials():
     raise Unavailable("not signed in -- run `cursor-agent login` or sign in to Cursor")
 
 
-def cursor_post(path, cookie, body):
-    # These endpoints reject cross-origin POSTs, so the Origin header is required.
-    req = urllib.request.Request(
-        "https://cursor.com/api/dashboard/" + path,
-        data=json.dumps(body).encode(),
-        headers={
-            "Cookie": f"WorkosCursorSessionToken={cookie}",
-            "Content-Type": "application/json",
-            "Origin": "https://cursor.com",
-            "User-Agent": "aiusage",
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-            return json.load(resp)
-    except urllib.error.HTTPError as e:
-        raise Unavailable(f"HTTP {e.code} on {path}") from e
-    except OSError as e:
-        raise Unavailable(str(e)) from e
-
-
-def add_month(when):
-    month = when.month % 12 + 1
-    year = when.year + (when.month // 12)
-    day = min(when.day, 28)  # billing anchors past the 28th are not worth guessing
-    return when.replace(year=year, month=month, day=day)
-
-
 def cursor_usage():
     cookie = cursor_credentials()
     headers = {"Cookie": f"WorkosCursorSessionToken={cookie}", "User-Agent": "aiusage"}
 
-    billing = get_json("https://cursor.com/api/auth/stripe", headers)
-    plan = billing.get("membershipType")
-    if billing.get("subscriptionStatus") not in (None, "active", "trialing"):
-        plan = f"{plan}, {billing['subscriptionStatus']}"
+    # Everything quota-related lives on one endpoint: the cycle dates, both
+    # included pools and the on-demand cap.
+    data = get_json("https://cursor.com/api/usage-summary", headers)
+    resets_at = parse_time(data.get("billingCycleEnd"))
+    usage = data.get("individualUsage") or data.get("teamUsage") or {}
 
-    # The monthly-invoice endpoint reports the *next* billing period, so the
-    # cycle anchor comes from startOfMonth on the legacy usage endpoint instead.
-    anchor = parse_time((get_json("https://cursor.com/api/usage", headers) or {}).get("startOfMonth"))
-    if anchor is None:
-        raise Unavailable("could not determine the billing cycle start")
+    # Pro includes two separate pools, and only these percentages compare them
+    # honestly -- see the note on `used`/`limit` in docs/usage.md.
+    windows = []
+    plan_quota = usage.get("plan") or {}
+    for key, label in (("autoPercentUsed", "Cursor models"),
+                       ("apiPercentUsed", "Other models")):
+        if plan_quota.get(key) is not None:
+            windows.append(Window(label, plan_quota[key], resets_at))
+    # The on-demand cap only buys usage *past* those pools, so it is noise until
+    # something has actually been charged against it. Here dollars are the unit
+    # the vendor itself uses, and both halves come from the same pot.
+    extra = usage.get("onDemand") or {}
+    if extra.get("used") and extra.get("limit"):
+        windows.append(Window.spend(
+            "On-demand spend", extra["used"], extra["limit"], resets_at))
+    return {"plan": data.get("membershipType"), "status": cursor_status(headers),
+            "windows": windows}
 
-    limit_dollars = cursor_post("get-hard-limit", cookie, {}).get("hardLimit")
-    used_cents = cursor_usage_based_cents(cookie, anchor.timestamp() * 1000)
 
-    window = Window("Usage-based spend", None, add_month(anchor))
-    window.used_dollars = used_cents / 100
-    window.limit_dollars = float(limit_dollars) if limit_dollars is not None else None
-    if limit_dollars:
-        window.percent = round(100 * used_cents / (limit_dollars * 100))
-    return {"plan": plan, "windows": [window]}
+def cursor_status(headers):
+    """Billing trouble worth flagging, or None while the subscription is fine.
 
-
-def cursor_usage_based_cents(cookie, cycle_start_ms):
-    """Spend charged against the hard limit since the cycle began.
-
-    Only USAGE_BASED events count. The aggregated-usage-events endpoint is not
-    usable here -- it reports plan-included cost, which is never billed.
-    Events come back newest-first, so paging stops at the cycle boundary.
+    A nice-to-have, so failing to read it must not cost us the quota.
     """
-    total = 0.0
-    for page in range(1, 41):  # 40 pages x 500 is far more than one cycle holds
-        events = cursor_post(
-            "get-filtered-usage-events", cookie, {"page": page, "pageSize": 500}
-        ).get("usageEventsDisplay") or []
-        if not events:
-            break
-        for event in events:
-            if float(event["timestamp"]) < cycle_start_ms:
-                continue
-            if event.get("kind") == "USAGE_EVENT_KIND_USAGE_BASED":
-                total += float(event.get("chargedCents") or 0)
-        if float(events[-1]["timestamp"]) < cycle_start_ms:
-            break
-    return total
+    try:
+        status = get_json("https://cursor.com/api/auth/stripe", headers).get("subscriptionStatus")
+    except Unavailable:
+        return None
+    return None if status in (None, "active", "trialing") else status
 
 
 # --- formatting -------------------------------------------------------------
+
+SPINNER = "|/-\\"
+
 
 def parse_time(value):
     if not value:
@@ -308,10 +286,10 @@ def reset_from_offset(seconds):
 
 
 def describe_window(seconds):
-    for size, name in ((604800, "weekly"), (86400, "daily"), (18000, "5-hour"), (3600, "hourly")):
+    for size, name in ((604800, "Weekly"), (86400, "Daily"), (18000, "5-hour"), (3600, "Hourly")):
         if seconds == size:
             return name
-    return f"{seconds // 3600}h"
+    return f"{seconds // 3600}-hour"
 
 
 def humanize_until(when):
@@ -334,6 +312,47 @@ def bar(percent, width=20):
     return "#" * filled + "." * (width - filled)
 
 
+def window_line(w, label_width):
+    if w["limit_dollars"] is not None:
+        left = f"${w['limit_dollars'] - w['used_dollars']:.2f} left"
+    elif w["remaining_percent"] is None:
+        left = "?"
+    else:
+        left = f"{w['remaining_percent']:>3.0f}% left"
+    when = parse_time(w["resets_at"])
+    resets = f"resets in {humanize_until(when)}" if when else "no reset reported"
+    return f"  {w['label']:<{label_width}} [{bar(w['used_percent'])}] {left:>9}  {resets}"
+
+
+def provider_lines(name, result, spin, label_width):
+    """One provider's block -- a spinner while its answer is still in flight."""
+    if result is None:
+        return [name, f"  {spin} checking"]
+    tags = [t for t in (result.get("plan"), result.get("status")) if t]
+    header = name + (f"  [{', '.join(tags)}]" if tags else "")
+    if not result["ok"]:
+        return [header, f"  unavailable: {result['error']}"]
+    if not result["windows"]:
+        return [header, "  no quota windows reported"]
+    return [header] + [window_line(w, label_width) for w in result["windows"]]
+
+
+def render(names, results, spin=" "):
+    """Every provider's block, blank-line separated, as a list of lines."""
+    # One column width for every provider, so the bars line up down the page
+    # however long a vendor decides to make its window names.
+    label_width = max([20] + [len(w["label"]) for r in results.values() for w in r["windows"]])
+
+    lines = []
+    for name in names:
+        if lines:
+            lines.append("")
+        lines.extend(provider_lines(name, results.get(name), spin, label_width))
+    return lines
+
+
+# --- providers --------------------------------------------------------------
+
 PROVIDERS = [
     ("Claude Code", claude_usage),
     ("Codex", codex_usage),
@@ -341,44 +360,109 @@ PROVIDERS = [
 ]
 
 
-def collect(only=None):
-    results = []
-    for name, fn in PROVIDERS:
-        if only and name.lower().split()[0] not in only:
-            continue
-        try:
-            data = fn()
-            results.append({"provider": name, "ok": True, **data,
-                            "windows": [w.as_dict() for w in data["windows"]]})
-        except Unavailable as e:
-            results.append({"provider": name, "ok": False, "error": str(e), "windows": []})
+def run_provider(name, fn):
+    try:
+        data = fn()
+        return {"provider": name, "ok": True, "plan": data["plan"],
+                "status": data.get("status"),
+                "windows": [w.as_dict() for w in data["windows"]]}
+    # Three undocumented endpoints, so one provider going down -- expected, or
+    # through a parsing bug of ours -- must not take the other two with it. A
+    # bug still reads as one, because its exception is named in the message.
+    except Exception as e:  # noqa: BLE001
+        detail = str(e) if isinstance(e, Unavailable) else f"{type(e).__name__}: {e}"
+        return {"provider": name, "ok": False, "error": detail, "windows": []}
+
+
+FRAME_SECONDS = 0.1  # how often an animating caller wants to redraw
+
+
+def collect(providers, on_tick=None):
+    """Query every provider at once, filling results in as each one answers.
+
+    `on_tick` is called with what has arrived so far, both on every answer and
+    on a timer, so a caller animating a spinner has something to redraw.
+    """
+    results = {}
+    # Deliberately not the `with` form: it joins the threads on the way out, so
+    # Ctrl-C during a stalled request would hang here instead of unwinding.
+    pool = futures.ThreadPoolExecutor(max_workers=len(providers))
+    try:
+        pending = {pool.submit(run_provider, name, fn): name for name, fn in providers}
+        while pending:
+            done, _ = futures.wait(pending, timeout=FRAME_SECONDS if on_tick else None)
+            for future in done:
+                name = pending.pop(future)
+                results[name] = future.result()
+            if on_tick:
+                on_tick(results)
+    finally:
+        pool.shutdown(wait=False)
     return results
 
 
-def render(results):
-    lines = []
-    for r in results:
-        header = r["provider"]
-        if r.get("plan"):
-            header += f"  [{r['plan']}]"
-        lines.append(header)
-        if not r["ok"]:
-            lines.append(f"  unavailable: {r['error']}")
-        elif not r["windows"]:
-            lines.append("  no quota windows reported")
-        for w in r["windows"]:
-            used = w["used_percent"]
-            if w["limit_dollars"] is not None:
-                left = f"${w['limit_dollars'] - w['used_dollars']:.2f} left"
-            elif used is None:
-                left = "?"
-            else:
-                left = f"{100 - used:>3.0f}% left"
-            when = parse_time(w["resets_at"])
-            resets = f"resets in {humanize_until(when)}" if when else "no reset reported"
-            lines.append(f"  {w['label']:<26} [{bar(used)}] {left}  {resets}")
-        lines.append("")
-    return "\n".join(lines).rstrip()
+# --- live output ------------------------------------------------------------
+
+class Live:
+    """Repaints a block of lines in place, hiding the cursor while it does.
+
+    Stops repainting once the block outgrows the window, where counting lines
+    back up would fight the terminal's own scrolling; `finish` then prints the
+    finished block plainly, so a caller need not know which way it went.
+    """
+
+    def __init__(self, out):
+        self.out = out
+        self.painted = 0
+        self.shown = None
+        self.on = True
+
+    def __enter__(self):
+        self.out.write("\033[?25l")  # or the cursor flickers over the spinner
+        return self
+
+    def __exit__(self, *exc_info):
+        self.out.write("\033[?25h")
+        self.out.flush()
+
+    def paint(self, lines):
+        if not self.on or lines == self.shown:
+            return
+        size = shutil.get_terminal_size()  # a pty may report no size at all
+        rows, cols = size.lines or 24, size.columns or 80
+        if len(lines) >= rows:
+            self.erase()
+            self.on = False
+            return
+        self.erase()
+        # Clip rather than let the terminal wrap: a wrapped line costs two rows
+        # and the rewind above would then land in the middle of the block.
+        self.out.write("\n".join(line[:cols] for line in lines) + "\n")
+        self.out.flush()
+        self.painted, self.shown = len(lines), lines
+
+    def erase(self):
+        if self.painted:
+            self.out.write(f"\033[{self.painted}A\033[J")
+            self.out.flush()
+            self.painted, self.shown = 0, None
+
+    def finish(self, lines):
+        self.paint(lines)
+        if not self.on:
+            self.out.write("\n".join(lines) + "\n")
+            self.out.flush()
+
+
+def show_live(providers, out):
+    """Draw the block immediately, then fill each provider in as it answers."""
+    names = [name for name, _ in providers]
+    spinner = itertools.cycle(SPINNER)
+    with Live(out) as live:
+        live.paint(render(names, {}, next(spinner)))
+        results = collect(providers, lambda r: live.paint(render(names, r, next(spinner))))
+        live.finish(render(names, results))
+    return results
 
 
 def main():
@@ -388,10 +472,28 @@ def main():
                     help="limit to claude, codex and/or cursor")
     args = ap.parse_args()
 
-    results = collect({p.lower() for p in args.only} if args.only else None)
-    print(json.dumps(results, indent=2) if args.json else render(results))
-    return 0 if any(r["ok"] for r in results) else 1
+    only = {p.lower() for p in args.only} if args.only else None
+    providers = [(n, fn) for n, fn in PROVIDERS if not only or n.lower().split()[0] in only]
+    if not providers:
+        ap.error("unknown provider -- choose from claude, codex, cursor")
+
+    names = [name for name, _ in providers]
+    if args.json:
+        results = collect(providers)
+        print(json.dumps([results[n] for n in names], indent=2))
+    elif sys.stdout.isatty():
+        results = show_live(providers, sys.stdout)
+    else:
+        results = collect(providers)
+        print("\n".join(render(names, results)))
+    return 0 if any(r["ok"] for r in results.values()) else 1
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        # A normal exit would wait for the in-flight requests to time out, so
+        # leave now -- there is nothing here worth flushing but stdout.
+        sys.stdout.flush()
+        os._exit(130)

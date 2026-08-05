@@ -49,18 +49,20 @@ Make sure `~/.local/bin` is in your `PATH` so the command is available in new sh
 ## The `usage` command
 
 The installer also links a quota tracker that reports how much Claude Code, Codex and
-Cursor allowance is left and when each resets. See [docs/usage.md](docs/usage.md).
+Cursor allowance is left and when each resets. All three are asked at once, and each
+one appears the moment it answers. See [docs/usage.md](docs/usage.md).
 
 ```text
 Claude Code
-  5-hour session             [####................]  81% left  resets in 1h 49m
-  Weekly (all models)        [###############.....]  26% left  resets in 10h 59m
+  5-hour session       [####................]  81% left  resets in 1h 49m
+  Weekly (all models)  [###############.....]  26% left  resets in 10h 59m
 
 Codex  [plus]
-  Primary (weekly)           [####################]   0% left  resets in 2d 18h
+  Weekly               [####################]   0% left  resets in 2d 18h
 
 Cursor  [pro]
-  Usage-based spend          [....................] $1.00 left  resets in 30d 16h
+  Cursor models        [....................]  99% left  resets in 30d 16h
+  Other models         [....................] 100% left  resets in 30d 16h
 ```
 
 If another command on the machine already provides the name `usage`, it installs as
