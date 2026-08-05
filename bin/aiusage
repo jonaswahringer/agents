@@ -1,0 +1,397 @@
+#!/usr/bin/env python3
+"""Show how much subscription quota is left across Claude Code, Codex and Cursor.
+
+Polls each vendor's usage endpoint rather than estimating from local logs, so the
+numbers match what the vendor thinks -- including usage from other machines.
+"""
+
+import argparse
+import datetime as dt
+import json
+import os
+import subprocess
+import sqlite3
+import sys
+import urllib.error
+import urllib.request
+
+TIMEOUT = 20
+
+
+class Unavailable(Exception):
+    """Provider can't be read -- not signed in, or the endpoint refused us."""
+
+
+def get_json(url, headers):
+    req = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        detail = e.read().decode("utf-8", "replace")[:200]
+        raise Unavailable(f"HTTP {e.code}: {detail}") from e
+    except OSError as e:
+        raise Unavailable(str(e)) from e
+
+
+class Window:
+    """One quota window: what fraction is used and when it resets."""
+
+    def __init__(self, label, percent, resets_at):
+        self.label = label
+        self.percent = percent
+        self.resets_at = resets_at
+        # Set only for spend-denominated windows, where dollars are the real
+        # unit and the percentage is derived.
+        self.used_dollars = None
+        self.limit_dollars = None
+
+    def as_dict(self):
+        return {
+            "label": self.label,
+            "used_percent": self.percent,
+            "remaining_percent": None if self.percent is None else 100 - self.percent,
+            "used_dollars": self.used_dollars,
+            "limit_dollars": self.limit_dollars,
+            "resets_at": None if self.resets_at is None else self.resets_at.isoformat(),
+        }
+
+
+# --- Claude Code ------------------------------------------------------------
+# Credentials live in the login keychain; ~/.claude/.credentials.json is a stale
+# copy on machines where the keychain is in use, so the keychain wins.
+
+def claude_token():
+    try:
+        out = subprocess.run(
+            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            capture_output=True, text=True, timeout=TIMEOUT,
+        )
+    except OSError as e:
+        raise Unavailable(str(e)) from e
+    blobs = []
+    if out.returncode == 0 and out.stdout.strip():
+        blobs.append(out.stdout)
+    path = os.path.expanduser("~/.claude/.credentials.json")
+    if os.path.exists(path):
+        with open(path) as f:
+            blobs.append(f.read())
+
+    best = None
+    for blob in blobs:
+        try:
+            oauth = json.loads(blob)["claudeAiOauth"]
+        except (ValueError, KeyError):
+            continue
+        if best is None or oauth.get("expiresAt", 0) > best.get("expiresAt", 0):
+            best = oauth
+    if best is None:
+        raise Unavailable("not signed in to Claude Code")
+    expires = best.get("expiresAt")
+    if expires and expires / 1000 < dt.datetime.now().timestamp():
+        raise Unavailable("token expired -- run `claude` once to refresh it")
+    return best["accessToken"]
+
+
+def claude_version():
+    try:
+        out = subprocess.run(["claude", "--version"], capture_output=True, text=True, timeout=TIMEOUT)
+        if out.returncode == 0:
+            return out.stdout.split()[0]
+    except OSError:
+        pass
+    return "2.1.212"
+
+
+def claude_usage():
+    # The User-Agent matters: without a claude-code/<version> UA the endpoint
+    # answers 429 permanently, with no Retry-After to back off against.
+    data = get_json(
+        "https://api.anthropic.com/api/oauth/usage",
+        {
+            "Authorization": "Bearer " + claude_token(),
+            "anthropic-beta": "oauth-2025-04-20",
+            "User-Agent": f"claude-code/{claude_version()}",
+        },
+    )
+    windows = []
+    for limit in data.get("limits") or []:
+        scope = (limit.get("scope") or {}).get("model") or {}
+        name = scope.get("display_name")
+        label = {
+            "session": "5-hour session",
+            "weekly_all": "Weekly (all models)",
+            "weekly_scoped": f"Weekly ({name or 'scoped'})",
+        }.get(limit.get("kind"), limit.get("kind", "unknown"))
+        windows.append(Window(label, limit.get("percent"), parse_time(limit.get("resets_at"))))
+
+    if not windows:  # older response shape, before `limits` was added
+        for key, label in (("five_hour", "5-hour session"), ("seven_day", "Weekly (all models)")):
+            w = data.get(key)
+            if w:
+                windows.append(Window(label, w.get("utilization"), parse_time(w.get("resets_at"))))
+    return {"plan": None, "windows": windows}
+
+
+# --- Codex ------------------------------------------------------------------
+
+def codex_usage():
+    path = os.path.expanduser("~/.codex/auth.json")
+    if not os.path.exists(path):
+        raise Unavailable("not signed in to Codex")
+    with open(path) as f:
+        tokens = json.load(f).get("tokens") or {}
+    if not tokens.get("access_token"):
+        raise Unavailable("no Codex OAuth token (API-key mode has no quota window)")
+
+    data = get_json(
+        "https://chatgpt.com/backend-api/wham/usage",
+        {
+            "Authorization": "Bearer " + tokens["access_token"],
+            "chatgpt-account-id": tokens.get("account_id", ""),
+            "User-Agent": "codex_cli_rs",
+        },
+    )
+    rate = data.get("rate_limit") or {}
+    windows = []
+    for key, label in (("primary_window", "Primary"), ("secondary_window", "Secondary")):
+        w = rate.get(key)
+        if not w:
+            continue
+        secs = w.get("limit_window_seconds")
+        windows.append(Window(
+            f"{label} ({describe_window(secs)})" if secs else label,
+            w.get("used_percent"),
+            reset_from_epoch(w.get("reset_at")) or reset_from_offset(w.get("reset_after_seconds")),
+        ))
+    return {"plan": data.get("plan_type"), "windows": windows}
+
+
+# --- Cursor -----------------------------------------------------------------
+# Two credential sources: the cursor-agent CLI keeps its token in the login
+# keychain, the desktop editor keeps one in state.vscdb. Either works, so the
+# CLI alone is enough -- the editor need not be installed.
+
+CURSOR_DBS = [
+    "~/Library/Application Support/Cursor/User/globalStorage/state.vscdb",
+    "~/.config/Cursor/User/globalStorage/state.vscdb",
+]
+
+
+def cursor_credentials():
+    token = subprocess.run(
+        ["security", "find-generic-password", "-s", "cursor-access-token",
+         "-a", "cursor-user", "-w"],
+        capture_output=True, text=True, timeout=TIMEOUT,
+    ).stdout.strip()
+    user_id = None
+    config = os.path.expanduser("~/.cursor/cli-config.json")
+    if os.path.exists(config):
+        with open(config) as f:
+            user_id = (json.load(f).get("authInfo") or {}).get("userId")
+    if token and user_id:
+        return f"user_{user_id}%3A%3A{token}"
+
+    db = next((p for p in (os.path.expanduser(p) for p in CURSOR_DBS) if os.path.exists(p)), None)
+    if db:
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        try:
+            row = conn.execute(
+                "select value from ItemTable where key = 'cursorAuth/accessToken'"
+            ).fetchone()
+        finally:
+            conn.close()
+        if row and row[0]:
+            return row[0]
+    raise Unavailable("not signed in -- run `cursor-agent login` or sign in to Cursor")
+
+
+def cursor_post(path, cookie, body):
+    # These endpoints reject cross-origin POSTs, so the Origin header is required.
+    req = urllib.request.Request(
+        "https://cursor.com/api/dashboard/" + path,
+        data=json.dumps(body).encode(),
+        headers={
+            "Cookie": f"WorkosCursorSessionToken={cookie}",
+            "Content-Type": "application/json",
+            "Origin": "https://cursor.com",
+            "User-Agent": "aiusage",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        raise Unavailable(f"HTTP {e.code} on {path}") from e
+    except OSError as e:
+        raise Unavailable(str(e)) from e
+
+
+def add_month(when):
+    month = when.month % 12 + 1
+    year = when.year + (when.month // 12)
+    day = min(when.day, 28)  # billing anchors past the 28th are not worth guessing
+    return when.replace(year=year, month=month, day=day)
+
+
+def cursor_usage():
+    cookie = cursor_credentials()
+    headers = {"Cookie": f"WorkosCursorSessionToken={cookie}", "User-Agent": "aiusage"}
+
+    billing = get_json("https://cursor.com/api/auth/stripe", headers)
+    plan = billing.get("membershipType")
+    if billing.get("subscriptionStatus") not in (None, "active", "trialing"):
+        plan = f"{plan}, {billing['subscriptionStatus']}"
+
+    # The monthly-invoice endpoint reports the *next* billing period, so the
+    # cycle anchor comes from startOfMonth on the legacy usage endpoint instead.
+    anchor = parse_time((get_json("https://cursor.com/api/usage", headers) or {}).get("startOfMonth"))
+    if anchor is None:
+        raise Unavailable("could not determine the billing cycle start")
+
+    limit_dollars = cursor_post("get-hard-limit", cookie, {}).get("hardLimit")
+    used_cents = cursor_usage_based_cents(cookie, anchor.timestamp() * 1000)
+
+    window = Window("Usage-based spend", None, add_month(anchor))
+    window.used_dollars = used_cents / 100
+    window.limit_dollars = float(limit_dollars) if limit_dollars is not None else None
+    if limit_dollars:
+        window.percent = round(100 * used_cents / (limit_dollars * 100))
+    return {"plan": plan, "windows": [window]}
+
+
+def cursor_usage_based_cents(cookie, cycle_start_ms):
+    """Spend charged against the hard limit since the cycle began.
+
+    Only USAGE_BASED events count. The aggregated-usage-events endpoint is not
+    usable here -- it reports plan-included cost, which is never billed.
+    Events come back newest-first, so paging stops at the cycle boundary.
+    """
+    total = 0.0
+    for page in range(1, 41):  # 40 pages x 500 is far more than one cycle holds
+        events = cursor_post(
+            "get-filtered-usage-events", cookie, {"page": page, "pageSize": 500}
+        ).get("usageEventsDisplay") or []
+        if not events:
+            break
+        for event in events:
+            if float(event["timestamp"]) < cycle_start_ms:
+                continue
+            if event.get("kind") == "USAGE_EVENT_KIND_USAGE_BASED":
+                total += float(event.get("chargedCents") or 0)
+        if float(events[-1]["timestamp"]) < cycle_start_ms:
+            break
+    return total
+
+
+# --- formatting -------------------------------------------------------------
+
+def parse_time(value):
+    if not value:
+        return None
+    try:
+        # fromisoformat rejects a trailing Z before Python 3.11.
+        return dt.datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone()
+    except (ValueError, AttributeError):
+        return None
+
+
+def reset_from_epoch(value):
+    return None if not value else dt.datetime.fromtimestamp(value).astimezone()
+
+
+def reset_from_offset(seconds):
+    if seconds is None:
+        return None
+    return (dt.datetime.now() + dt.timedelta(seconds=seconds)).astimezone()
+
+
+def describe_window(seconds):
+    for size, name in ((604800, "weekly"), (86400, "daily"), (18000, "5-hour"), (3600, "hourly")):
+        if seconds == size:
+            return name
+    return f"{seconds // 3600}h"
+
+
+def humanize_until(when):
+    if when is None:
+        return "unknown"
+    delta = when - dt.datetime.now().astimezone()
+    secs = int(delta.total_seconds())
+    if secs <= 0:
+        return "now"
+    days, rem = divmod(secs, 86400)
+    hours, mins = divmod(rem // 60, 60)
+    parts = [f"{days}d" if days else "", f"{hours}h" if hours else "", f"{mins}m" if not days else ""]
+    return " ".join(p for p in parts if p) or "<1m"
+
+
+def bar(percent, width=20):
+    if percent is None:
+        return "?" * width
+    filled = max(0, min(width, round(width * percent / 100)))
+    return "#" * filled + "." * (width - filled)
+
+
+PROVIDERS = [
+    ("Claude Code", claude_usage),
+    ("Codex", codex_usage),
+    ("Cursor", cursor_usage),
+]
+
+
+def collect(only=None):
+    results = []
+    for name, fn in PROVIDERS:
+        if only and name.lower().split()[0] not in only:
+            continue
+        try:
+            data = fn()
+            results.append({"provider": name, "ok": True, **data,
+                            "windows": [w.as_dict() for w in data["windows"]]})
+        except Unavailable as e:
+            results.append({"provider": name, "ok": False, "error": str(e), "windows": []})
+    return results
+
+
+def render(results):
+    lines = []
+    for r in results:
+        header = r["provider"]
+        if r.get("plan"):
+            header += f"  [{r['plan']}]"
+        lines.append(header)
+        if not r["ok"]:
+            lines.append(f"  unavailable: {r['error']}")
+        elif not r["windows"]:
+            lines.append("  no quota windows reported")
+        for w in r["windows"]:
+            used = w["used_percent"]
+            if w["limit_dollars"] is not None:
+                left = f"${w['limit_dollars'] - w['used_dollars']:.2f} left"
+            elif used is None:
+                left = "?"
+            else:
+                left = f"{100 - used:>3.0f}% left"
+            when = parse_time(w["resets_at"])
+            resets = f"resets in {humanize_until(when)}" if when else "no reset reported"
+            lines.append(f"  {w['label']:<26} [{bar(used)}] {left}  {resets}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--json", action="store_true", help="machine-readable output")
+    ap.add_argument("--only", nargs="+", metavar="PROVIDER",
+                    help="limit to claude, codex and/or cursor")
+    args = ap.parse_args()
+
+    results = collect({p.lower() for p in args.only} if args.only else None)
+    print(json.dumps(results, indent=2) if args.json else render(results))
+    return 0 if any(r["ok"] for r in results) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

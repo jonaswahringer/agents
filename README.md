@@ -46,6 +46,28 @@ Every replaced conflict receives a timestamped backup beside the original path.
 
 Make sure `~/.local/bin` is in your `PATH` so the command is available in new shells.
 
+## The `usage` command
+
+The installer also links a quota tracker that reports how much Claude Code, Codex and
+Cursor allowance is left and when each resets. See [docs/usage.md](docs/usage.md).
+
+```text
+Claude Code
+  5-hour session             [####................]  81% left  resets in 1h 49m
+  Weekly (all models)        [###############.....]  26% left  resets in 10h 59m
+
+Codex  [plus]
+  Primary (weekly)           [####################]   0% left  resets in 2d 18h
+
+Cursor  [pro]
+  Usage-based spend          [....................] $1.00 left  resets in 30d 16h
+```
+
+If another command on the machine already provides the name `usage`, it installs as
+`aiusage` instead and tells you. Pass `--force` to take the name anyway, or set
+`AGENTS_USAGE_NAME` to choose a different one. `agents doctor` reports whichever name
+is in use.
+
 ## Update or change the setup
 
 ```sh

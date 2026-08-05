@@ -20,6 +20,9 @@ PROFILE_DIR="$CONFIG_DIR/profile"
 SELECTED_FILE="$CONFIG_DIR/selected-skills"
 GLOBAL_STATE_FILE="$CONFIG_DIR/global-config"
 AGENTS_DIR="${AGENTS_HOME:-$HOME/.agents}"
+BIN_DIR="${AGENTS_BIN_DIR:-$HOME/.local/bin}"
+USAGE_NAME="${AGENTS_USAGE_NAME:-usage}"
+USAGE_FALLBACK_NAME="aiusage"
 CLAUDE_DIR="${CLAUDE_HOME:-$HOME/.claude}"
 CODEX_DIR="${CODEX_HOME:-$HOME/.codex}"
 FORCE=0
@@ -45,6 +48,9 @@ Installer options:
   --no-config                Do not create global config
   --non-interactive          Do not open the keyboard menu
   --force                    Back up and replace conflicting files
+
+Environment:
+  AGENTS_USAGE_NAME          Name for the quota command (default: usage)
 EOF
 }
 
@@ -414,6 +420,45 @@ safe_link() {
   fi
 }
 
+# Reports the command name actually installed, so install and doctor agree.
+resolved_usage_name() {
+  local source="$ROOT/bin/aiusage" existing
+  if link_points_to "$BIN_DIR/$USAGE_NAME" "$source"; then
+    echo "$USAGE_NAME"
+    return 0
+  fi
+  # `type -P` searches PATH executables only. Plain `command -v` would match
+  # this script's own usage() function and always claim a conflict.
+  existing="$(type -P "$USAGE_NAME" 2>/dev/null || true)"
+  if [[ -n "$existing" && $FORCE -eq 0 ]]; then
+    echo "$USAGE_FALLBACK_NAME"
+  else
+    echo "$USAGE_NAME"
+  fi
+}
+
+install_usage_command() {
+  local source="$ROOT/bin/aiusage" name existing
+  [[ -f "$source" ]] || return 0
+  name="$(resolved_usage_name)"
+  if [[ "$name" != "$USAGE_NAME" ]]; then
+    existing="$(type -P "$USAGE_NAME" 2>/dev/null || true)"
+    echo "'$USAGE_NAME' is already provided by $existing; installing it as '$name' instead."
+    echo "Pass --force, or set AGENTS_USAGE_NAME, to take the name anyway."
+  fi
+  # Remove a stale link under the other name so only one copy survives.
+  local other="$USAGE_NAME"
+  [[ "$name" == "$USAGE_NAME" ]] && other="$USAGE_FALLBACK_NAME"
+  if link_points_to "$BIN_DIR/$other" "$source"; then
+    rm "$BIN_DIR/$other"
+  fi
+  safe_link "$source" "$BIN_DIR/$name"
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) echo "Add $BIN_DIR to your PATH to run '$name'." ;;
+  esac
+}
+
 remove_old_skill_links() {
   local skill target expected
   [[ -f "$SELECTED_FILE" ]] || return 0
@@ -482,6 +527,7 @@ install_command() {
   [[ $CONFIG_SELECTED -eq 0 ]] || configure_global
   save_global_state
   sync_skills
+  install_usage_command
   echo
   echo "agents is installed. Run 'agents doctor' to check the setup."
 }
@@ -528,6 +574,16 @@ doctor_command() {
     path="$AGENTS_DIR/skills/$skill"
     if [[ -e "$path/SKILL.md" ]]; then echo "ok  $skill"; else echo "missing  $skill"; failed=1; fi
   done
+  source="$ROOT/bin/aiusage"
+  if [[ -f "$source" ]]; then
+    path="$BIN_DIR/$(resolved_usage_name)"
+    if link_points_to "$path" "$source"; then
+      echo "ok  $path -> $source"
+    else
+      echo "missing  $path"
+      failed=1
+    fi
+  fi
   return "$failed"
 }
 
@@ -554,6 +610,7 @@ reconcile_command() {
     install_global_config_links
   fi
   sync_skills
+  install_usage_command
 }
 
 case "${1:-help}" in
