@@ -1,4 +1,4 @@
-# aiusage
+# usage
 
 One command that answers "how much quota do I have left, and when does it reset?"
 across Claude Code, Codex and Cursor.

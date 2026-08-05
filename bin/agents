@@ -422,7 +422,7 @@ safe_link() {
 
 # Reports the command name actually installed, so install and doctor agree.
 resolved_usage_name() {
-  local source="$ROOT/bin/aiusage" existing
+  local source="$ROOT/bin/usage" existing
   if link_points_to "$BIN_DIR/$USAGE_NAME" "$source"; then
     echo "$USAGE_NAME"
     return 0
@@ -438,7 +438,7 @@ resolved_usage_name() {
 }
 
 install_usage_command() {
-  local source="$ROOT/bin/aiusage" name existing
+  local source="$ROOT/bin/usage" name existing
   [[ -f "$source" ]] || return 0
   name="$(resolved_usage_name)"
   if [[ "$name" != "$USAGE_NAME" ]]; then
@@ -574,7 +574,7 @@ doctor_command() {
     path="$AGENTS_DIR/skills/$skill"
     if [[ -e "$path/SKILL.md" ]]; then echo "ok  $skill"; else echo "missing  $skill"; failed=1; fi
   done
-  source="$ROOT/bin/aiusage"
+  source="$ROOT/bin/usage"
   if [[ -f "$source" ]]; then
     path="$BIN_DIR/$(resolved_usage_name)"
     if link_points_to "$path" "$source"; then
