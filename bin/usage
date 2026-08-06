@@ -24,6 +24,9 @@ import urllib.request
 
 TIMEOUT = 20
 STREAM_SECONDS = 90  # how long `usage live` waits between polls
+# Anthropic's usage endpoint has no Retry-After and punishes tight loops; sit
+# out a couple of live cycles after a 429 instead of digging the hole deeper.
+CLAUDE_429_COOLDOWN = 180
 
 
 class Unavailable(Exception):
@@ -36,7 +39,9 @@ def get_json(url, headers):
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
-        detail = e.read().decode("utf-8", "replace")[:200]
+        # Collapse whitespace so a JSON error body stays one terminal row --
+        # embedded newlines break Live's line-count erase and stack copies.
+        detail = " ".join(e.read().decode("utf-8", "replace").split())[:200]
         raise Unavailable(f"HTTP {e.code}: {detail}") from e
     except OSError as e:
         raise Unavailable(str(e)) from e
@@ -121,17 +126,30 @@ def claude_version():
     return "2.1.212"
 
 
+_claude_cooldown_until = 0.0
+
+
 def claude_usage():
     # The User-Agent matters: without a claude-code/<version> UA the endpoint
     # answers 429 permanently, with no Retry-After to back off against.
-    data = get_json(
-        "https://api.anthropic.com/api/oauth/usage",
-        {
-            "Authorization": "Bearer " + claude_token(),
-            "anthropic-beta": "oauth-2025-04-20",
-            "User-Agent": f"claude-code/{claude_version()}",
-        },
-    )
+    global _claude_cooldown_until
+    now = time.monotonic()
+    if now < _claude_cooldown_until:
+        wait = int(_claude_cooldown_until - now)
+        raise Unavailable(f"rate limited -- retry in {wait}s")
+    try:
+        data = get_json(
+            "https://api.anthropic.com/api/oauth/usage",
+            {
+                "Authorization": "Bearer " + claude_token(),
+                "anthropic-beta": "oauth-2025-04-20",
+                "User-Agent": f"claude-code/{claude_version()}",
+            },
+        )
+    except Unavailable as e:
+        if "HTTP 429" in str(e):
+            _claude_cooldown_until = time.monotonic() + CLAUDE_429_COOLDOWN
+        raise
     windows = []
     for limit in data.get("limits") or []:
         scope = (limit.get("scope") or {}).get("model") or {}
@@ -437,16 +455,17 @@ class Live:
             return
         size = shutil.get_terminal_size()  # a pty may report no size at all
         rows, cols = size.lines or 24, size.columns or 80
-        if len(lines) >= rows:
+        # One logical line must stay one terminal row: embedded newlines (error
+        # JSON) and wrapping both desync the erase count and stack debris.
+        safe = [line.replace("\n", " ").replace("\r", " ")[:cols] for line in lines]
+        if len(safe) >= rows:
             self.erase()
             self.on = False
             return
         self.erase()
-        # Clip rather than let the terminal wrap: a wrapped line costs two rows
-        # and the rewind above would then land in the middle of the block.
-        self.out.write("\n".join(line[:cols] for line in lines) + "\n")
+        self.out.write("\n".join(safe) + "\n")
         self.out.flush()
-        self.painted, self.shown = len(lines), lines
+        self.painted, self.shown = len(safe), lines
 
     def erase(self):
         if self.painted:
