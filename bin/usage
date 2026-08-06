@@ -30,10 +30,13 @@ STREAM_SECONDS = 90  # how long `usage live` waits between polls
 class Unavailable(Exception):
     """Provider can't be read -- not signed in, or the endpoint refused us."""
 
-    def __init__(self, message, retry_after=None):
+    def __init__(self, message, retry_after=None, plan=None, status=None):
         super().__init__(message)
         # Seconds from a Retry-After header, or None when the server gave none.
         self.retry_after = retry_after
+        # Optional tags still worth showing on the header when the fetch failed.
+        self.plan = plan
+        self.status = status
 
 
 def parse_retry_after(headers):
@@ -101,7 +104,8 @@ class Window:
 # Credentials live in the login keychain; ~/.claude/.credentials.json is a stale
 # copy on machines where the keychain is in use, so the keychain wins.
 
-def claude_token():
+def claude_oauth():
+    """Freshest Claude Code OAuth blob from the keychain or credentials file."""
     try:
         out = subprocess.run(
             ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
@@ -129,8 +133,19 @@ def claude_token():
         raise Unavailable("not signed in to Claude Code")
     expires = best.get("expiresAt")
     if expires and expires / 1000 < dt.datetime.now().timestamp():
-        raise Unavailable("token expired -- run `claude` once to refresh it")
-    return best["accessToken"]
+        raise Unavailable("token expired -- run `claude` once to refresh it",
+                          plan=claude_plan(best))
+    return best
+
+
+def claude_plan(oauth):
+    """Short plan tag from the login blob, e.g. max5 for default_claude_max_5x."""
+    tier = (oauth.get("rateLimitTier") or "").lower()
+    if "max_20x" in tier:
+        return "max20"
+    if "max_5x" in tier:
+        return "max5"
+    return oauth.get("subscriptionType") or None
 
 
 def claude_version():
@@ -154,35 +169,37 @@ def claude_usage():
     # answers 429 permanently. With the right UA, honour Retry-After when it is
     # a positive number of seconds; otherwise say we were refused and move on.
     global _claude_cooldown_until, _claude_cooldown_known
+    oauth = claude_oauth()
+    plan = claude_plan(oauth)
     now = time.monotonic()
     if now < _claude_cooldown_until:
         if _claude_cooldown_known:
             wait = max(1, math.ceil(_claude_cooldown_until - now))
-            raise Unavailable(f"rate limited -- retry in {wait}s")
-        raise Unavailable("rate limited")
+            raise Unavailable(f"rate limited -- retry in {wait}s", plan=plan)
+        raise Unavailable("rate limited", plan=plan)
     try:
         data = get_json(
             "https://api.anthropic.com/api/oauth/usage",
             {
-                "Authorization": "Bearer " + claude_token(),
+                "Authorization": "Bearer " + oauth["accessToken"],
                 "anthropic-beta": "oauth-2025-04-20",
                 "User-Agent": f"claude-code/{claude_version()}",
             },
         )
     except Unavailable as e:
         if "HTTP 429" not in str(e):
-            raise
+            raise Unavailable(str(e), retry_after=e.retry_after, plan=plan) from e
         retry = e.retry_after
         if retry is not None and retry > 0:
             _claude_cooldown_until = time.monotonic() + retry
             _claude_cooldown_known = True
-            raise Unavailable(f"rate limited -- retry in {retry}s") from e
+            raise Unavailable(f"rate limited -- retry in {retry}s", plan=plan) from e
         # retry-after: 0 / missing -- common for the "wrong bucket" refusal.
         # Sit out one live interval so mashing `r` does not dig further; do not
         # invent a countdown or grow the wait on repeats.
         _claude_cooldown_until = time.monotonic() + STREAM_SECONDS
         _claude_cooldown_known = False
-        raise Unavailable("rate limited") from e
+        raise Unavailable("rate limited", plan=plan) from e
     windows = []
     for limit in data.get("limits") or []:
         scope = (limit.get("scope") or {}).get("model") or {}
@@ -199,7 +216,7 @@ def claude_usage():
             w = data.get(key)
             if w:
                 windows.append(Window(label, w.get("utilization"), parse_time(w.get("resets_at"))))
-    return {"plan": None, "windows": windows}
+    return {"plan": plan, "windows": windows}
 
 
 # --- Codex ------------------------------------------------------------------
@@ -385,7 +402,7 @@ def provider_lines(name, result, spin, label_width):
     if result is None:
         return [name, f"  {spin} checking"]
     tags = [t for t in (result.get("plan"), result.get("status")) if t]
-    header = name + (f"  [{', '.join(tags)}]" if tags else "")
+    header = name + (f" [{', '.join(tags)}]" if tags else "")
     if not result["ok"]:
         return [header, f"  unavailable: {result['error']}"]
     if not result["windows"]:
@@ -393,7 +410,12 @@ def provider_lines(name, result, spin, label_width):
     return [header] + [window_line(w, label_width) for w in result["windows"]]
 
 
-def render(names, results, spin=" ", hint=None):
+def format_refresh_time(when):
+    """Local clock as `22:26 (6.8.2026)` -- day/month without leading zeros."""
+    return f"{when.strftime('%H:%M')} ({when.day}.{when.month}.{when.year})"
+
+
+def render(names, results, spin=" ", hint=None, refreshed_at=None):
     """Every provider's block, blank-line separated, as a list of lines."""
     # One column width for every provider, so the bars line up down the page
     # however long a vendor decides to make its window names.
@@ -404,8 +426,13 @@ def render(names, results, spin=" ", hint=None):
         if lines:
             lines.append("")
         lines.extend(provider_lines(name, results.get(name), spin, label_width))
-    if hint:
-        lines.extend(["", hint])
+    if refreshed_at is not None or hint:
+        lines.append("")
+        lines.append("----------------------------")
+        if refreshed_at is not None:
+            lines.append(f"Last refresh at {format_refresh_time(refreshed_at)}")
+        if hint:
+            lines.append(hint)
     return lines
 
 
@@ -429,7 +456,13 @@ def run_provider(name, fn):
     # bug still reads as one, because its exception is named in the message.
     except Exception as e:  # noqa: BLE001
         detail = str(e) if isinstance(e, Unavailable) else f"{type(e).__name__}: {e}"
-        return {"provider": name, "ok": False, "error": detail, "windows": []}
+        out = {"provider": name, "ok": False, "error": detail, "windows": []}
+        if isinstance(e, Unavailable):
+            if e.plan is not None:
+                out["plan"] = e.plan
+            if e.status is not None:
+                out["status"] = e.status
+        return out
 
 
 FRAME_SECONDS = 0.1  # how often an animating caller wants to redraw
@@ -517,7 +550,8 @@ def show_live(providers, out, hint=None):
     """Draw the block immediately, then fill each provider in as it answers."""
     names = [name for name, _ in providers]
     with Live(out) as live:
-        return paint_collect(providers, names, live, hint=hint)
+        results, _ = paint_collect(providers, names, live, hint=hint)
+        return results
 
 
 def wait_for_reload(seconds):
@@ -539,16 +573,18 @@ def wait_for_reload(seconds):
             return True
 
 
-def paint_collect(providers, names, live, hint=None):
+def paint_collect(providers, names, live, hint=None, refreshed_at=None):
     """One poll cycle: spinner in, each provider filled as it answers."""
     spinner = itertools.cycle(SPINNER)
-    live.paint(render(names, {}, next(spinner), hint=hint))
+    live.paint(render(names, {}, next(spinner), hint=hint, refreshed_at=refreshed_at))
     results = collect(
         providers,
-        lambda r: live.paint(render(names, r, next(spinner), hint=hint)),
+        lambda r: live.paint(render(names, r, next(spinner), hint=hint,
+                                    refreshed_at=refreshed_at)),
     )
-    live.finish(render(names, results, hint=hint))
-    return results
+    refreshed_at = dt.datetime.now().astimezone()
+    live.finish(render(names, results, hint=hint, refreshed_at=refreshed_at))
+    return results, refreshed_at
 
 
 def show_stream(providers, out):
@@ -558,6 +594,7 @@ def show_stream(providers, out):
 
     names = [name for name, _ in providers]
     hint = "Reload [r]"
+    refreshed_at = None
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     try:
@@ -567,7 +604,8 @@ def show_stream(providers, out):
                 # finish() may have given up on a tiny window; re-enable so the
                 # next poll can try in-place redraw again after a resize.
                 live.on = True
-                paint_collect(providers, names, live, hint=hint)
+                _, refreshed_at = paint_collect(
+                    providers, names, live, hint=hint, refreshed_at=refreshed_at)
                 wait_for_reload(STREAM_SECONDS)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
@@ -601,7 +639,8 @@ def main():
         results = show_live(providers, sys.stdout)
     else:
         results = collect(providers)
-        print("\n".join(render(names, results)))
+        print("\n".join(render(
+            names, results, refreshed_at=dt.datetime.now().astimezone())))
     return 0 if any(r["ok"] for r in results.values()) else 1
 
 

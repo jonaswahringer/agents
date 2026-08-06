@@ -34,8 +34,11 @@ vendor answers, so the slowest one no longer holds up the other two. Piped outpu
 `--json` skip the animation and print once everything has landed.
 
 `usage live` keeps that same view on screen. It polls again every 90 seconds, or
-sooner if you press `r`. A `Reload [r]` hint sits under the last provider. Needs an
-interactive terminal; `--json` is refused.
+sooner if you press `r`. Under the providers a rule, `Last refresh at HH:MM (D.M.YYYY)`,
+and `Reload [r]` sit as a footer. Needs an interactive terminal; `--json` is refused.
+
+Claude's plan tag (e.g. `max5`) comes from the login blob's `rateLimitTier`, so it
+still shows when the usage endpoint is rate-limited.
 
 ## Things that will bite you
 
