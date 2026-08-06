@@ -10,6 +10,7 @@ import concurrent.futures as futures
 import datetime as dt
 import itertools
 import json
+import math
 import os
 import select
 import shutil
@@ -24,13 +25,28 @@ import urllib.request
 
 TIMEOUT = 20
 STREAM_SECONDS = 90  # how long `usage live` waits between polls
-# Anthropic's usage endpoint has no Retry-After and punishes tight loops; sit
-# out a couple of live cycles after a 429 instead of digging the hole deeper.
-CLAUDE_429_COOLDOWN = 180
 
 
 class Unavailable(Exception):
     """Provider can't be read -- not signed in, or the endpoint refused us."""
+
+    def __init__(self, message, retry_after=None):
+        super().__init__(message)
+        # Seconds from a Retry-After header, or None when the server gave none.
+        self.retry_after = retry_after
+
+
+def parse_retry_after(headers):
+    """Return Retry-After as integer seconds, or None if absent/unusable."""
+    if headers is None:
+        return None
+    raw = headers.get("Retry-After")
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None  # HTTP-date form; this endpoint has not been seen to send it
 
 
 def get_json(url, headers):
@@ -39,10 +55,11 @@ def get_json(url, headers):
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return json.load(resp)
     except urllib.error.HTTPError as e:
+        retry_after = parse_retry_after(e.headers)
         # Collapse whitespace so a JSON error body stays one terminal row --
         # embedded newlines break Live's line-count erase and stack copies.
         detail = " ".join(e.read().decode("utf-8", "replace").split())[:200]
-        raise Unavailable(f"HTTP {e.code}: {detail}") from e
+        raise Unavailable(f"HTTP {e.code}: {detail}", retry_after=retry_after) from e
     except OSError as e:
         raise Unavailable(str(e)) from e
     except ValueError as e:  # an error page where JSON was promised
@@ -126,17 +143,23 @@ def claude_version():
     return "2.1.212"
 
 
+# Cooldown deadline, plus whether that deadline came from a positive
+# Retry-After (show a countdown) or from our own one-cycle sit-out (don't).
 _claude_cooldown_until = 0.0
+_claude_cooldown_known = False
 
 
 def claude_usage():
     # The User-Agent matters: without a claude-code/<version> UA the endpoint
-    # answers 429 permanently, with no Retry-After to back off against.
-    global _claude_cooldown_until
+    # answers 429 permanently. With the right UA, honour Retry-After when it is
+    # a positive number of seconds; otherwise say we were refused and move on.
+    global _claude_cooldown_until, _claude_cooldown_known
     now = time.monotonic()
     if now < _claude_cooldown_until:
-        wait = int(_claude_cooldown_until - now)
-        raise Unavailable(f"rate limited -- retry in {wait}s")
+        if _claude_cooldown_known:
+            wait = max(1, math.ceil(_claude_cooldown_until - now))
+            raise Unavailable(f"rate limited -- retry in {wait}s")
+        raise Unavailable("rate limited")
     try:
         data = get_json(
             "https://api.anthropic.com/api/oauth/usage",
@@ -147,9 +170,19 @@ def claude_usage():
             },
         )
     except Unavailable as e:
-        if "HTTP 429" in str(e):
-            _claude_cooldown_until = time.monotonic() + CLAUDE_429_COOLDOWN
-        raise
+        if "HTTP 429" not in str(e):
+            raise
+        retry = e.retry_after
+        if retry is not None and retry > 0:
+            _claude_cooldown_until = time.monotonic() + retry
+            _claude_cooldown_known = True
+            raise Unavailable(f"rate limited -- retry in {retry}s") from e
+        # retry-after: 0 / missing -- common for the "wrong bucket" refusal.
+        # Sit out one live interval so mashing `r` does not dig further; do not
+        # invent a countdown or grow the wait on repeats.
+        _claude_cooldown_until = time.monotonic() + STREAM_SECONDS
+        _claude_cooldown_known = False
+        raise Unavailable("rate limited") from e
     windows = []
     for limit in data.get("limits") or []:
         scope = (limit.get("scope") or {}).get("model") or {}

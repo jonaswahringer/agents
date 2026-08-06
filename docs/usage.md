@@ -42,8 +42,10 @@ interactive terminal; `--json` is refused.
 - **All three endpoints are undocumented.** They can change without notice. Treat a
   provider going `unavailable` as expected maintenance, not a crash.
 - **The Anthropic endpoint checks the User-Agent.** Without a `claude-code/<version>`
-  UA it returns 429 forever, with no `Retry-After` to back off against. A real 429
-  trips a 180s cooldown so `usage live` does not keep hammering.
+  UA it returns 429 forever. A countdown is shown only when the response carries a
+  positive `Retry-After` (seconds). `retry-after: 0` or a missing header becomes
+  plain `rate limited` (no number) and we skip Claude for one live interval so
+  mashing `r` does not dig further — we do not invent or double a wait.
 - **Keychain over file.** On macOS, `~/.claude/.credentials.json` is often a stale
   copy; the tool reads both and uses whichever token expires later.
 - **Tokens are not refreshed here.** If Claude's token has expired, run `claude` once
