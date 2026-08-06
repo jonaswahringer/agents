@@ -5,6 +5,7 @@ across Claude Code, Codex and Cursor.
 
 ```
 usage                     # human-readable
+usage live                # same view, refreshes every 90s; press r to reload now
 usage --json              # machine-readable, for a statusline or monitor
 usage --only claude codex
 ```
@@ -31,6 +32,10 @@ All three are queried at once, in threads. On a terminal the layout is drawn
 immediately with a spinner per provider, and each block is replaced the moment that
 vendor answers, so the slowest one no longer holds up the other two. Piped output and
 `--json` skip the animation and print once everything has landed.
+
+`usage live` keeps that same view on screen. It polls again every 90 seconds, or
+sooner if you press `r`. A `Reload [r]` hint sits under the last provider. Needs an
+interactive terminal; `--json` is refused.
 
 ## Things that will bite you
 

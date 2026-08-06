@@ -11,14 +11,19 @@ import datetime as dt
 import itertools
 import json
 import os
+import select
 import shutil
 import subprocess
 import sqlite3
 import sys
+import termios
+import time
+import tty
 import urllib.error
 import urllib.request
 
 TIMEOUT = 20
+STREAM_SECONDS = 90  # how long `usage live` waits between polls
 
 
 class Unavailable(Exception):
@@ -337,7 +342,7 @@ def provider_lines(name, result, spin, label_width):
     return [header] + [window_line(w, label_width) for w in result["windows"]]
 
 
-def render(names, results, spin=" "):
+def render(names, results, spin=" ", hint=None):
     """Every provider's block, blank-line separated, as a list of lines."""
     # One column width for every provider, so the bars line up down the page
     # however long a vendor decides to make its window names.
@@ -348,6 +353,8 @@ def render(names, results, spin=" "):
         if lines:
             lines.append("")
         lines.extend(provider_lines(name, results.get(name), spin, label_width))
+    if hint:
+        lines.extend(["", hint])
     return lines
 
 
@@ -454,23 +461,77 @@ class Live:
             self.out.flush()
 
 
-def show_live(providers, out):
+def show_live(providers, out, hint=None):
     """Draw the block immediately, then fill each provider in as it answers."""
     names = [name for name, _ in providers]
-    spinner = itertools.cycle(SPINNER)
     with Live(out) as live:
-        live.paint(render(names, {}, next(spinner)))
-        results = collect(providers, lambda r: live.paint(render(names, r, next(spinner))))
-        live.finish(render(names, results))
+        return paint_collect(providers, names, live, hint=hint)
+
+
+def wait_for_reload(seconds):
+    """Sleep up to `seconds`, returning True if the user pressed r sooner."""
+    deadline = time.monotonic() + seconds
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        ready, _, _ = select.select([sys.stdin], [], [], min(remaining, 0.25))
+        if not ready:
+            continue
+        # Drain the whole burst so a held key does not fire the next wait too.
+        hit = False
+        while select.select([sys.stdin], [], [], 0)[0]:
+            if sys.stdin.read(1) in ("r", "R"):
+                hit = True
+        if hit:
+            return True
+
+
+def paint_collect(providers, names, live, hint=None):
+    """One poll cycle: spinner in, each provider filled as it answers."""
+    spinner = itertools.cycle(SPINNER)
+    live.paint(render(names, {}, next(spinner), hint=hint))
+    results = collect(
+        providers,
+        lambda r: live.paint(render(names, r, next(spinner), hint=hint)),
+    )
+    live.finish(render(names, results, hint=hint))
     return results
+
+
+def show_stream(providers, out):
+    """Keep redrawing: auto-refresh every STREAM_SECONDS, or sooner on 'r'."""
+    if not (sys.stdin.isatty() and out.isatty()):
+        raise SystemExit("live mode needs an interactive terminal")
+
+    names = [name for name, _ in providers]
+    hint = "Reload [r]"
+    fd = sys.stdin.fileno()
+    old = termios.tcgetattr(fd)
+    try:
+        tty.setcbreak(fd)  # one key at a time, Ctrl-C still interrupts
+        with Live(out) as live:
+            while True:
+                # finish() may have given up on a tiny window; re-enable so the
+                # next poll can try in-place redraw again after a resize.
+                live.on = True
+                paint_collect(providers, names, live, hint=hint)
+                wait_for_reload(STREAM_SECONDS)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("mode", nargs="?", choices=["live"],
+                    help="keep refreshing on a timer; press r to reload now")
     ap.add_argument("--json", action="store_true", help="machine-readable output")
     ap.add_argument("--only", nargs="+", metavar="PROVIDER",
                     help="limit to claude, codex and/or cursor")
     args = ap.parse_args()
+
+    if args.mode == "live" and args.json:
+        ap.error("--json cannot be used with live mode")
 
     only = {p.lower() for p in args.only} if args.only else None
     providers = [(n, fn) for n, fn in PROVIDERS if not only or n.lower().split()[0] in only]
@@ -478,6 +539,9 @@ def main():
         ap.error("unknown provider -- choose from claude, codex, cursor")
 
     names = [name for name, _ in providers]
+    if args.mode == "live":
+        show_stream(providers, sys.stdout)
+        return 0  # reached only if the loop ever grows an exit
     if args.json:
         results = collect(providers)
         print(json.dumps([results[n] for n in names], indent=2))
