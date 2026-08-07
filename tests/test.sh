@@ -55,7 +55,7 @@ assert_file "$TEST_HOME/.claude/CLAUDE.md.backup-"* 2>/dev/null || fail "expecte
 assert_file "$TEST_HOME/.codex/AGENTS.md.backup-"* 2>/dev/null || fail "expected the old Codex config to be backed up"
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "I build developer tools."
 
-for skill in nice-to-read commit work-smart-not-hard; do
+for skill in nice-to-read commit goals work-smart-not-hard; do
   assert_link "$TEST_HOME/.agents/skills/$skill"
   assert_link "$TEST_HOME/.claude/skills/$skill"
   assert_link "$TEST_HOME/.codex/skills/$skill"
@@ -71,7 +71,7 @@ printf '\nA personal line that updates must preserve.\n' >> "$TEST_HOME/.agents/
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "A personal line that updates must preserve."
 
 "$AGENTS" skills --none >/dev/null
-for skill in nice-to-read commit work-smart-not-hard; do
+for skill in nice-to-read commit goals work-smart-not-hard; do
   assert_missing "$TEST_HOME/.agents/skills/$skill"
   assert_missing "$TEST_HOME/.claude/skills/$skill"
   assert_missing "$TEST_HOME/.codex/skills/$skill"

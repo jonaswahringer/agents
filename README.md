@@ -14,6 +14,7 @@ The installer opens a keyboard menu:
 [x] Global config
 [-] Skills
     [x] commit
+    [x] goals
     [x] nice-to-read
     [ ] work-smart-not-hard
 ```
@@ -111,6 +112,7 @@ The profile prompts also accept these environment variables for automated machin
 ## Included skills
 
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
+- `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
 - `nice-to-read` makes explanations easy to read once and understand.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
 
