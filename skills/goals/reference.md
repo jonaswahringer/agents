@@ -33,6 +33,6 @@ Shrink toward something they can ship and care about. One at a time:
 - **Complete** — done-when met; move file to `done/`, set Status + Ended + What happened. Later goals may still **From** it.
 - **Drop** — honest stop; move to `dropped/` with why. A dropped attempt beats a fake finish.
 - **Add** — only if active goals across the tree are under the cap; otherwise cut or complete one first.
-- **Relocate root** — new folder path → update `~/.config/agents/goals-root` (and move the tree if they want the files to follow).
+- **Relocate root** — move the tree to a new path (keep `_root.md` at the new root). No files outside the tree are involved.
 
 Every manage turn leaves **one** small next action on an active goal (open the tutorial, scaffold the app, reproduce the bug).

@@ -1,9 +1,10 @@
 # Goals tree
 
-Everything below the **goals root** (absolute path in `~/.config/agents/goals-root`):
+The **goals root** is whatever directory contains `_root.md`. The skill creates and updates that tree; nothing outside it records the location.
 
 ```text
 <goals-root>/
+  _root.md                   # marks this folder as the goals root
   <aspiration-slug>/
     _aspiration.md           # outer rim — not a deliverable
     <goal-slug>.md           # active deliverable
@@ -17,6 +18,14 @@ Everything below the **goals root** (absolute path in `~/.config/agents/goals-ro
 - **Goal file** = a pointed deliverable on an **arrow**. Lives under its primary aspiration; may reference other aspirations by slug.
 - **From** = prior goal(s) whose arrows led here (`aspiration-slug/goal-slug`, including `done/` or `dropped/` peers). Empty only for a true first arrow from the rim.
 - **Status** = which directory the goal file is in (`active` at folder root, else `done/` or `dropped/`).
+
+## `_root.md`
+
+```markdown
+# Goals root
+
+Managed by the `goals` skill. Aspiration folders and goal files live under this directory.
+```
 
 ## `_aspiration.md`
 
