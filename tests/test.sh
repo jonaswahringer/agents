@@ -141,3 +141,4 @@ assert_link "$CANONICAL_HOME/.codex/AGENTS.md"
 HOME="$CANONICAL_HOME" "$CANONICAL_HOME/.local/bin/agents" doctor >/dev/null
 
 echo "PASS: installer, nested skills, deduplication, conflicts, and migrations"
+python3 "$ROOT/tests/test_usage.py"

@@ -66,8 +66,8 @@ Cursor  [pro]
   Other models         [....................] 100% left  resets in 30d 16h
 ```
 
-`usage live` keeps that view open, refreshing every 90 seconds. Press `r` to reload
-sooner.
+`usage live` keeps that view open, refreshing every three minutes. Press `r` to
+reload the other providers sooner; Claude keeps its server-requested cooldown.
 
 If another command on the machine already provides the name `usage`, it installs as
 `aiusage` instead and tells you. Pass `--force` to take the name anyway, or set

@@ -5,7 +5,7 @@ across Claude Code, Codex and Cursor.
 
 ```
 usage                     # human-readable
-usage live                # same view, refreshes every 90s; press r to reload now
+usage live                # same view, refreshes every 3 minutes; press r to reload
 usage --json              # machine-readable, for a statusline or monitor
 usage --only claude codex
 ```
@@ -33,9 +33,11 @@ immediately with a spinner per provider, and each block is replaced the moment t
 vendor answers, so the slowest one no longer holds up the other two. Piped output and
 `--json` skip the animation and print once everything has landed.
 
-`usage live` keeps that same view on screen. It polls again every 90 seconds, or
-sooner if you press `r`. Under the providers a rule, `Last refresh at HH:MM (D.M.YYYY)`,
-and `Reload [r]` sit as a footer. Needs an interactive terminal; `--json` is refused.
+`usage live` keeps that same view on screen. It polls again every three minutes.
+Pressing `r` reloads the other providers sooner, but it never makes Claude request
+again before a server-requested cooldown has elapsed. Under the providers a rule,
+`Last refresh at HH:MM (D.M.YYYY)`, and `Reload [r]` sit as a footer. Needs an
+interactive terminal; `--json` is refused.
 
 Claude's plan tag (e.g. `max5`) comes from the login blob's `rateLimitTier`, so it
 still shows when the usage endpoint is rate-limited.
@@ -49,6 +51,12 @@ still shows when the usage endpoint is rate-limited.
   positive `Retry-After` (seconds). `retry-after: 0` or a missing header becomes
   plain `rate limited` (no number) and we skip Claude for one live interval so
   mashing `r` does not dig further — we do not invent or double a wait.
+- **Claude's last successful quota snapshot is cached locally.** If a later check is
+  rate-limited, the bars remain visible as `stale — last confirmed … ago`, followed
+  by the endpoint's retry request. The cache holds quota values and a retry deadline,
+  never OAuth credentials, at `$XDG_CACHE_HOME/agents/claude-usage.json` or
+  `~/.cache/agents/claude-usage.json`. It lets a restarted command honor an existing
+  cooldown without hiding the last known quota.
 - **Keychain over file.** On macOS, `~/.claude/.credentials.json` is often a stale
   copy; the tool reads both and uses whichever token expires later.
 - **Tokens are not refreshed here.** If Claude's token has expired, run `claude` once

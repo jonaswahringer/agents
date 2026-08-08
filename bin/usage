@@ -18,13 +18,14 @@ import subprocess
 import sqlite3
 import sys
 import termios
+import tempfile
 import time
 import tty
 import urllib.error
 import urllib.request
 
 TIMEOUT = 20
-STREAM_SECONDS = 90  # how long `usage live` waits between polls
+STREAM_SECONDS = 180  # how long `usage live` waits between polls
 
 
 class Unavailable(Exception):
@@ -158,48 +159,51 @@ def claude_version():
     return "2.1.212"
 
 
-# Cooldown deadline, plus whether that deadline came from a positive
-# Retry-After (show a countdown) or from our own one-cycle sit-out (don't).
+# Cooldown deadline for this process. A positive server deadline is also written
+# beside the last good response, so restarting the command cannot bypass it.
 _claude_cooldown_until = 0.0
 _claude_cooldown_known = False
 
 
-def claude_usage():
-    # The User-Agent matters: without a claude-code/<version> UA the endpoint
-    # answers 429 permanently. With the right UA, honour Retry-After when it is
-    # a positive number of seconds; otherwise say we were refused and move on.
-    global _claude_cooldown_until, _claude_cooldown_known
-    oauth = claude_oauth()
-    plan = claude_plan(oauth)
-    now = time.monotonic()
-    if now < _claude_cooldown_until:
-        if _claude_cooldown_known:
-            wait = max(1, math.ceil(_claude_cooldown_until - now))
-            raise Unavailable(f"rate limited -- retry in {wait}s", plan=plan)
-        raise Unavailable("rate limited", plan=plan)
+def claude_cache_path():
+    """A small cache contains quota values, never credentials."""
+    root = os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache")
+    return os.path.join(root, "agents", "claude-usage.json")
+
+
+def load_claude_cache():
+    """Return a valid cache record, or an empty record after any cache failure."""
     try:
-        data = get_json(
-            "https://api.anthropic.com/api/oauth/usage",
-            {
-                "Authorization": "Bearer " + oauth["accessToken"],
-                "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": f"claude-code/{claude_version()}",
-            },
-        )
-    except Unavailable as e:
-        if "HTTP 429" not in str(e):
-            raise Unavailable(str(e), retry_after=e.retry_after, plan=plan) from e
-        retry = e.retry_after
-        if retry is not None and retry > 0:
-            _claude_cooldown_until = time.monotonic() + retry
-            _claude_cooldown_known = True
-            raise Unavailable(f"rate limited -- retry in {retry}s", plan=plan) from e
-        # retry-after: 0 / missing -- common for the "wrong bucket" refusal.
-        # Sit out one live interval so mashing `r` does not dig further; do not
-        # invent a countdown or grow the wait on repeats.
-        _claude_cooldown_until = time.monotonic() + STREAM_SECONDS
-        _claude_cooldown_known = False
-        raise Unavailable("rate limited", plan=plan) from e
+        with open(claude_cache_path()) as f:
+            cache = json.load(f)
+        if cache.get("version") != 1 or not isinstance(cache.get("windows", []), list):
+            return {}
+        return cache
+    except (OSError, ValueError, AttributeError):
+        return {}
+
+
+def save_claude_cache(cache):
+    """Atomically persist a non-sensitive quota snapshot and retry deadline."""
+    path = claude_cache_path()
+    directory = os.path.dirname(path)
+    try:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        fd, temporary = tempfile.mkstemp(prefix=".claude-usage.", dir=directory)
+        with os.fdopen(fd, "w") as f:
+            os.chmod(temporary, 0o600)
+            json.dump(cache, f)
+            f.write("\n")
+        os.replace(temporary, path)
+    except OSError:
+        try:
+            os.unlink(temporary)
+        except (OSError, UnboundLocalError):
+            pass
+
+
+def claude_windows(data):
+    """Convert both known endpoint response shapes into display windows."""
     windows = []
     for limit in data.get("limits") or []:
         scope = (limit.get("scope") or {}).get("model") or {}
@@ -216,6 +220,108 @@ def claude_usage():
             w = data.get(key)
             if w:
                 windows.append(Window(label, w.get("utilization"), parse_time(w.get("resets_at"))))
+    return windows
+
+
+def cached_windows(cache):
+    """Recreate Window objects from a previously saved normalized response."""
+    windows = []
+    for item in cache.get("windows", []):
+        if not isinstance(item, dict) or not item.get("label"):
+            continue
+        window = Window(item["label"], item.get("used_percent"), parse_time(item.get("resets_at")))
+        window.used_dollars = item.get("used_dollars")
+        window.limit_dollars = item.get("limit_dollars")
+        windows.append(window)
+    return windows
+
+
+def retry_notice(seconds):
+    """A readable server cooldown, rounded up so we never promise an early retry."""
+    if seconds is None:
+        return "usage check rate-limited"
+    minutes = math.ceil(max(1, seconds) / 60)
+    hours, minutes = divmod(minutes, 60)
+    wait = f"{hours}h {minutes}m" if hours and minutes else f"{hours}h" if hours else f"{minutes}m"
+    return f"usage check rate-limited; server requested retry in {wait}"
+
+
+def cached_claude_usage(plan, cache, notice):
+    """A successful shape carrying old values and a separate refresh warning."""
+    windows = cached_windows(cache)
+    fetched_at = cache.get("fetched_at")
+    if not windows or parse_time(fetched_at) is None:
+        return None
+    return {"plan": plan, "windows": windows, "stale_at": fetched_at, "notice": notice}
+
+
+def claude_usage():
+    # The User-Agent matters: without a claude-code/<version> UA the endpoint
+    # answers 429 permanently. With the right UA, honour Retry-After when it is
+    # a positive number of seconds; otherwise say we were refused and move on.
+    global _claude_cooldown_until, _claude_cooldown_known
+    oauth = claude_oauth()
+    plan = claude_plan(oauth)
+    cache = load_claude_cache()
+    now = time.monotonic()
+    if now < _claude_cooldown_until:
+        if _claude_cooldown_known:
+            wait = max(1, math.ceil(_claude_cooldown_until - now))
+            cached = cached_claude_usage(plan, cache, retry_notice(wait))
+            if cached:
+                return cached
+            raise Unavailable(retry_notice(wait), plan=plan)
+        cached = cached_claude_usage(plan, cache, retry_notice(None))
+        if cached:
+            return cached
+        raise Unavailable(retry_notice(None), plan=plan)
+
+    retry_at = parse_time(cache.get("retry_at"))
+    if retry_at and retry_at > dt.datetime.now().astimezone():
+        wait = max(1, math.ceil((retry_at - dt.datetime.now().astimezone()).total_seconds()))
+        cached = cached_claude_usage(plan, cache, retry_notice(wait))
+        if cached:
+            return cached
+        raise Unavailable(retry_notice(wait), plan=plan)
+    try:
+        data = get_json(
+            "https://api.anthropic.com/api/oauth/usage",
+            {
+                "Authorization": "Bearer " + oauth["accessToken"],
+                "anthropic-beta": "oauth-2025-04-20",
+                "User-Agent": f"claude-code/{claude_version()}",
+            },
+        )
+    except Unavailable as e:
+        if "HTTP 429" not in str(e):
+            raise Unavailable(str(e), retry_after=e.retry_after, plan=plan) from e
+        retry = e.retry_after
+        if retry is not None and retry > 0:
+            _claude_cooldown_until = time.monotonic() + retry
+            _claude_cooldown_known = True
+            cache["version"] = 1
+            cache["retry_at"] = (dt.datetime.now().astimezone()
+                                 + dt.timedelta(seconds=retry)).isoformat()
+            save_claude_cache(cache)
+            cached = cached_claude_usage(plan, cache, retry_notice(retry))
+            if cached:
+                return cached
+            raise Unavailable(retry_notice(retry), plan=plan) from e
+        # retry-after: 0 / missing -- common for the "wrong bucket" refusal.
+        # Sit out one live interval so mashing `r` does not dig further; do not
+        # invent a countdown or grow the wait on repeats.
+        _claude_cooldown_until = time.monotonic() + STREAM_SECONDS
+        _claude_cooldown_known = False
+        cached = cached_claude_usage(plan, cache, retry_notice(None))
+        if cached:
+            return cached
+        raise Unavailable(retry_notice(None), plan=plan) from e
+    windows = claude_windows(data)
+    save_claude_cache({
+        "version": 1,
+        "fetched_at": dt.datetime.now().astimezone().isoformat(),
+        "windows": [window.as_dict() for window in windows],
+    })
     return {"plan": plan, "windows": windows}
 
 
@@ -378,6 +484,22 @@ def humanize_until(when):
     return " ".join(p for p in parts if p) or "<1m"
 
 
+def humanize_since(when):
+    """Short age for a cached quota snapshot."""
+    if when is None:
+        return "an unknown time"
+    secs = max(0, math.floor((dt.datetime.now().astimezone() - when).total_seconds()))
+    if secs < 60:
+        return "<1m"
+    days, rem = divmod(secs, 86400)
+    hours, mins = divmod(rem // 60, 60)
+    if days:
+        return f"{days}d"
+    if hours:
+        return f"{hours}h {mins}m" if mins else f"{hours}h"
+    return f"{mins}m"
+
+
 def bar(percent, width=20):
     if percent is None:
         return "?" * width
@@ -405,9 +527,16 @@ def provider_lines(name, result, spin, label_width):
     header = name + (f" [{', '.join(tags)}]" if tags else "")
     if not result["ok"]:
         return [header, f"  unavailable: {result['error']}"]
-    if not result["windows"]:
-        return [header, "  no quota windows reported"]
-    return [header] + [window_line(w, label_width) for w in result["windows"]]
+    lines = [header]
+    if result.get("stale_at"):
+        lines.append(f"  stale — last confirmed {humanize_since(parse_time(result['stale_at']))} ago")
+    if result["windows"]:
+        lines.extend(window_line(w, label_width) for w in result["windows"])
+    else:
+        lines.append("  no quota windows reported")
+    if result.get("notice"):
+        lines.append(f"  {result['notice']}")
+    return lines
 
 
 def format_refresh_time(when):
@@ -450,6 +579,8 @@ def run_provider(name, fn):
         data = fn()
         return {"provider": name, "ok": True, "plan": data["plan"],
                 "status": data.get("status"),
+                "stale_at": data.get("stale_at"),
+                "notice": data.get("notice"),
                 "windows": [w.as_dict() for w in data["windows"]]}
     # Three undocumented endpoints, so one provider going down -- expected, or
     # through a parsing bug of ours -- must not take the other two with it. A
