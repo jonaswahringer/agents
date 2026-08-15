@@ -1,20 +1,22 @@
 ---
 name: nice-to-read
-description: Respond in plain words a busy human can read once and understand. Use when writing any explanation, summary, report, or answer for the user, when the user says "explain simply" / "in plain words" / "make it nice to read", or when another skill needs readable output.
+description: Plain-English editing for explanations, summaries, reports, and answers. Use when writing for the user, when the user asks for a simple or readable explanation, or when another skill needs readable output.
 ---
 
 # Nice to read
 
-Every message you write is **plain**: a busy reader who missed the whole conversation reads it once and understands it. That one-pass gate is the completion criterion for the message — if a sentence needs a second read, rewrite it before sending.
+Use **one-pass clarity** as the finish line: a busy reader who missed the conversation can read the message once and understand what happened, why it matters, and what to do next.
 
-## Rules
+## The one-pass edit
 
-**Words.** Use the short, common word: *use* not *utilize*, *before* not *prior to*, *start* not *initiate*. Keep a technical term only when it is the precise name of the thing — then define it at first use in a few words.
+1. **Answer.** Put the outcome in the first sentence. Order the rest by how much it changes what the reader does next. This step is done when the reader can stop after the opening and still know the result.
 
-**Sentences.** One idea per sentence. Full sentences, in prose — write "A calls B, and B fails when the list is empty," never `A → B → fails` or clipped fragments. Concrete subject, active verb: "the test fails," not "failure is observed."
+2. **Ground.** Supply the context that the answer needs to stand alone. Introduce a concept before relying on it. Use one name for one thing. Keep a technical term when it is the precise name, and define it at first use if the reader might not know it. This step is done when no label, pronoun, or callback requires scrollback or guesswork.
 
-**Structure.** Lead with the outcome — the first sentence answers what happened or what you found. Supporting detail comes after, ordered by how much it changes what the reader does next; drop detail that changes nothing.
+3. **Simplify.** Borrow the portable rules of ASD-STE100 Simplified Technical English: put the actor before the action, keep one idea or instruction per sentence, and use short, complete sentences. Treat 25 words as a prompt to inspect a sentence, not as a hard limit. Use the short, common word: *use* rather than *utilize*, *before* rather than *prior to*, *start* rather than *initiate*. This step is done when every sentence has a clear subject, action, and purpose.
 
-**Self-contained.** The message stands alone. Spell out any label, codename, or numbering you invented earlier; the reader has no glossary and no scrollback.
+4. **Shape.** Keep one topic per paragraph. Use prose by default, a list for parallel items, and a table only for short facts with the same fields. Give a simple question a direct answer without extra sections. This step is done when the format makes the relationships easier to see.
 
-**Formatting.** Formatting earns its place: prose by default, a list only for genuinely parallel items, a table only for short enumerable facts with the explanation in surrounding prose. A simple question gets a direct answer, not headers and sections.
+5. **Prune and verify.** Remove throat-clearing, repetition, and detail that changes nothing. Preserve facts, conditions, uncertainty, requested detail, and failed or skipped checks. This step is done when every remaining sentence helps the reader understand or act and the meaning still matches the evidence.
+
+Read the final message once as a cold reader. Rewrite any sentence that needs a second read. Apply full ASD-STE100 only when the user asks for it; this skill uses its general clarity rules and does not claim compliance.
