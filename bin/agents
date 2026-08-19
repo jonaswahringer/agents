@@ -30,6 +30,9 @@ NON_INTERACTIVE=0
 CONFIG_SELECTED=1
 SELECTED=()
 SKILLS=()
+CATEGORIES=()
+ROW_KIND=()
+ROW_VALUE=()
 
 usage() {
   cat <<'EOF'
@@ -42,9 +45,11 @@ Usage:
   agents doctor              Check the current installation
   agents help
 
+Skills are grouped in folders by who wrote them, such as jonasw or mattp.
+
 Installer options:
   --all                      Select global config and every skill
-  --skills NAME,NAME         Select specific skills
+  --skills NAME,NAME         Select skills, folders, or folder/name
   --no-config                Do not create global config
   --non-interactive          Do not open the keyboard menu
   --force                    Back up and replace conflicting files
@@ -59,14 +64,83 @@ die() {
   exit 1
 }
 
+# Skills live at skills/<folder>/<name>/SKILL.md, where the folder names whoever
+# wrote them. A selection is always stored as "folder/name". Folders are read from
+# disk, so adding one to the repository is enough to make it appear in the menu.
 discover_skills() {
   SKILLS=()
-  local directory
-  for directory in "$ROOT"/skills/*; do
-    if [[ -f "$directory/SKILL.md" ]]; then
-      SKILLS+=("$(basename "$directory")")
+  CATEGORIES=()
+  local category_directory skill_directory category found
+  for category_directory in "$ROOT"/skills/*; do
+    [[ -d "$category_directory" ]] || continue
+    category="$(basename "$category_directory")"
+    found=0
+    for skill_directory in "$category_directory"/*; do
+      if [[ -f "$skill_directory/SKILL.md" ]]; then
+        SKILLS+=("$category/$(basename "$skill_directory")")
+        found=1
+      fi
+    done
+    if [[ $found -eq 1 ]]; then
+      CATEGORIES+=("$category")
     fi
   done
+}
+
+is_category() {
+  local wanted="$1" category
+  for category in "${CATEGORIES[@]}"; do
+    [[ "$category" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
+category_total() {
+  local category="$1" skill count=0
+  for skill in "${SKILLS[@]}"; do
+    [[ "${skill%%/*}" == "$category" ]] && count=$((count + 1))
+  done
+  printf '%s\n' "$count"
+}
+
+category_selected_count() {
+  local category="$1" skill count=0
+  for skill in "${SELECTED[@]}"; do
+    [[ "${skill%%/*}" == "$category" ]] && count=$((count + 1))
+  done
+  printf '%s\n' "$count"
+}
+
+category_fully_selected() {
+  local category="$1" total
+  total="$(category_total "$category")"
+  [[ $total -gt 0 && "$(category_selected_count "$category")" -eq $total ]]
+}
+
+# Accepts "folder/name", a bare name, or a name saved before skills had folders.
+# Exit 1 means no such skill, exit 2 means the bare name is in several folders.
+resolve_skill() {
+  local wanted="$1" skill matches=""
+  for skill in "${SKILLS[@]}"; do
+    if [[ "$skill" == "$wanted" || "${skill##*/}" == "$wanted" ]]; then
+      matches="$matches $skill"
+    fi
+  done
+  set -- $matches
+  if [[ $# -eq 0 ]]; then
+    return 1
+  fi
+  if [[ $# -eq 1 ]]; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  for skill in "$@"; do
+    if [[ "$skill" == "$wanted" ]]; then
+      printf '%s\n' "$skill"
+      return 0
+    fi
+  done
+  return 2
 }
 
 has_selected() {
@@ -98,13 +172,49 @@ select_all_skills() {
   done
 }
 
+select_category() {
+  local category="$1" skill
+  for skill in "${SKILLS[@]}"; do
+    if [[ "${skill%%/*}" == "$category" ]]; then
+      add_selected "$skill"
+    fi
+  done
+  return 0
+}
+
+deselect_category() {
+  local category="$1" skill
+  for skill in "${SKILLS[@]}"; do
+    if [[ "${skill%%/*}" == "$category" ]]; then
+      remove_selected "$skill"
+    fi
+  done
+  return 0
+}
+
+selected_installs_name() {
+  local wanted="$1" skill
+  for skill in "${SELECTED[@]}"; do
+    [[ "${skill##*/}" == "$wanted" ]] && return 0
+  done
+  return 1
+}
+
 load_selected() {
   SELECTED=()
-  if [[ -f "$SELECTED_FILE" ]]; then
-    while IFS= read -r skill; do
-      [[ -n "$skill" ]] && add_selected "$skill"
-    done < "$SELECTED_FILE"
-  fi
+  [[ -f "$SELECTED_FILE" ]] || return 0
+  local entry resolved status
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    resolved="$(resolve_skill "$entry")" && status=0 || status=$?
+    if [[ $status -eq 0 ]]; then
+      add_selected "$resolved"
+    elif [[ $status -eq 2 ]]; then
+      echo "Saved skill '$entry' is now in more than one folder; select it again." >&2
+    else
+      echo "Saved skill '$entry' no longer exists; dropping it." >&2
+    fi
+  done < "$SELECTED_FILE"
 }
 
 load_global_state() {
@@ -137,38 +247,133 @@ all_skills_selected() {
   [[ ${#SKILLS[@]} -gt 0 && ${#SELECTED[@]} -eq ${#SKILLS[@]} ]]
 }
 
-render_menu() {
-  local with_config="$1" cursor="$2" index=0 prefix mark skill
+build_rows() {
+  local with_config="$1" category skill
+  ROW_KIND=()
+  ROW_VALUE=()
   if [[ "$with_config" == 1 ]]; then
-    prefix="  "; [[ $cursor -eq $index ]] && prefix="> "
-    mark=" "; [[ $CONFIG_SELECTED -eq 1 ]] && mark="x"
-    printf '%s[%s] Global config\n' "$prefix" "$mark"
-    index=$((index + 1))
+    ROW_KIND+=("config"); ROW_VALUE+=("")
   fi
+  ROW_KIND+=("all"); ROW_VALUE+=("")
+  for category in "${CATEGORIES[@]}"; do
+    ROW_KIND+=("category"); ROW_VALUE+=("$category")
+    for skill in "${SKILLS[@]}"; do
+      [[ "${skill%%/*}" == "$category" ]] || continue
+      ROW_KIND+=("skill"); ROW_VALUE+=("$skill")
+    done
+  done
+}
 
-  prefix="  "; [[ $cursor -eq $index ]] && prefix="> "
-  if all_skills_selected; then
-    mark="x"
-  elif [[ ${#SELECTED[@]} -gt 0 ]]; then
-    mark="-"
-  else
-    mark=" "
-  fi
-  printf '%s[%s] Skills\n' "$prefix" "$mark"
-  index=$((index + 1))
+row_folder() {
+  local index="$1"
+  case "${ROW_KIND[$index]}" in
+    category) printf '%s\n' "${ROW_VALUE[$index]}" ;;
+    skill) printf '%s\n' "${ROW_VALUE[$index]%%/*}" ;;
+    *) printf '\n' ;;
+  esac
+}
 
-  for skill in "${SKILLS[@]}"; do
-    prefix="      "; [[ $cursor -eq $index ]] && prefix="    > "
-    mark=" "; has_selected "$skill" && mark="x"
-    printf '%s[%s] %s\n' "$prefix" "$mark" "$skill"
+# A folder lists its skills while the cursor is inside it, so the menu stays short.
+# A cursor of -1 opens every folder, which is what the menu snapshot needs.
+row_visible() {
+  local index="$1" cursor="$2"
+  [[ "${ROW_KIND[$index]}" == "skill" ]] || return 0
+  [[ $cursor -lt 0 ]] && return 0
+  [[ "$(row_folder "$index")" == "$(row_folder "$cursor")" ]]
+}
+
+render_menu() {
+  local with_config="$1" cursor="$2" index=0 kind label mark level indent prefix
+  build_rows "$with_config"
+  while [[ $index -lt ${#ROW_KIND[@]} ]]; do
+    if ! row_visible "$index" "$cursor"; then
+      index=$((index + 1))
+      continue
+    fi
+    kind="${ROW_KIND[$index]}"
+    case "$kind" in
+      config)
+        level=0; label="Global config"
+        mark=" "; [[ $CONFIG_SELECTED -eq 1 ]] && mark="x"
+        ;;
+      all)
+        level=0; label="Skills"
+        if all_skills_selected; then
+          mark="x"
+        elif [[ ${#SELECTED[@]} -gt 0 ]]; then
+          mark="-"
+        else
+          mark=" "
+        fi
+        ;;
+      category)
+        level=1; label="${ROW_VALUE[$index]}"
+        if category_fully_selected "$label"; then
+          mark="x"
+        elif [[ "$(category_selected_count "$label")" -gt 0 ]]; then
+          mark="-"
+        else
+          mark=" "
+        fi
+        ;;
+      *)
+        level=2; label="${ROW_VALUE[$index]##*/}"
+        mark=" "; has_selected "${ROW_VALUE[$index]}" && mark="x"
+        ;;
+    esac
+    indent=$((2 + level * 4))
+    prefix="$(printf '%*s' "$indent" '')"
+    [[ $cursor -eq $index ]] && prefix="$(printf '%*s> ' "$((indent - 2))" '')"
+    printf '%s[%s] %s\n' "$prefix" "$mark" "$label"
     index=$((index + 1))
   done
 }
 
+# Skips rows hidden inside a closed folder. Visibility is judged from where the
+# cursor is now, so leaving a folder lands on the next folder rather than its skills.
+next_row() {
+  local cursor="$1" delta="$2" count="${#ROW_KIND[@]}" next steps=0
+  next="$cursor"
+  while [[ $steps -lt $count ]]; do
+    next=$(((next + delta + count) % count))
+    steps=$((steps + 1))
+    if row_visible "$next" "$cursor"; then
+      break
+    fi
+  done
+  printf '%s\n' "$next"
+}
+
+toggle_row() {
+  # Assign in two steps: bash expands every argument of `local` before it assigns
+  # any of them, so a second value cannot read the first one.
+  local index="$1" value
+  value="${ROW_VALUE[$index]}"
+  case "${ROW_KIND[$index]}" in
+    config) CONFIG_SELECTED=$((1 - CONFIG_SELECTED)) ;;
+    all) if all_skills_selected; then SELECTED=(); else select_all_skills; fi ;;
+    category)
+      if category_fully_selected "$value"; then
+        deselect_category "$value"
+      else
+        select_category "$value"
+      fi
+      ;;
+    *)
+      if has_selected "$value"; then
+        remove_selected "$value"
+      else
+        add_selected "$value"
+      fi
+      ;;
+  esac
+}
+
 interactive_menu() {
-  local with_config="$1" cursor=0 key count offset skill_index
+  local with_config="$1" cursor=0 key
   [[ -r /dev/tty && -w /dev/tty ]] || die "interactive setup needs a terminal; use --all or --skills"
-  count=$((${#SKILLS[@]} + 1 + with_config))
+  build_rows "$with_config"
+  [[ ${#ROW_KIND[@]} -gt 0 ]] || return 0
 
   while true; do
     printf '\033[2J\033[H' > /dev/tty
@@ -179,27 +384,10 @@ interactive_menu() {
     IFS= read -rsn1 key < /dev/tty
     if [[ "$key" == $'\033' ]]; then
       IFS= read -rsn2 key < /dev/tty || true
-      [[ "$key" == "[A" ]] && cursor=$(((cursor - 1 + count) % count))
-      [[ "$key" == "[B" ]] && cursor=$(((cursor + 1) % count))
+      [[ "$key" == "[A" ]] && cursor="$(next_row "$cursor" -1)"
+      [[ "$key" == "[B" ]] && cursor="$(next_row "$cursor" 1)"
     elif [[ "$key" == " " ]]; then
-      offset=0
-      if [[ "$with_config" == 1 ]]; then
-        if [[ $cursor -eq 0 ]]; then
-          CONFIG_SELECTED=$((1 - CONFIG_SELECTED))
-          continue
-        fi
-        offset=1
-      fi
-      if [[ $cursor -eq $offset ]]; then
-        if all_skills_selected; then SELECTED=(); else select_all_skills; fi
-      else
-        skill_index=$((cursor - offset - 1))
-        if has_selected "${SKILLS[$skill_index]}"; then
-          remove_selected "${SKILLS[$skill_index]}"
-        else
-          add_selected "${SKILLS[$skill_index]}"
-        fi
-      fi
+      toggle_row "$cursor"
     elif [[ -z "$key" ]]; then
       printf '\033[2J\033[H' > /dev/tty
       return
@@ -390,12 +578,34 @@ configure_global() {
   install_global_config_links
 }
 
+# A link into this repository's skills tree, or into the canonical skills directory,
+# is one this tool made. Moving a skill into a folder may leave such a link broken,
+# and repointing it needs no approval.
+link_is_managed() {
+  local target="$1" destination directory
+  [[ -L "$target" ]] || return 1
+  destination="$(readlink "$target")"
+  if [[ "$destination" != /* ]]; then
+    directory="$(cd -P "$(dirname "$target")" 2>/dev/null && pwd)" || return 1
+    destination="$directory/$destination"
+  fi
+  case "$destination" in
+    "$ROOT"/skills/*|"$AGENTS_DIR"/skills/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 safe_link() {
   local source="$1" target="$2" backup
   mkdir -p "$(dirname "$target")"
   if link_points_to "$target" "$source"; then
     return 0
   elif [[ -L "$target" ]]; then
+    if link_is_managed "$target"; then
+      rm "$target"
+      ln -s "$source" "$target"
+      return 0
+    fi
     if ! confirm_replace "$target"; then
       echo "Skipped $target because it points somewhere else." >&2
       return 0
@@ -404,12 +614,12 @@ safe_link() {
     ln -s "$source" "$target"
     echo "Replaced $target; backup: $backup"
   elif [[ -e "$target" ]]; then
-    if [[ -d "$target" ]]; then
-      echo "agents: $target is a directory; move it before installing this skill" >&2
-      return 2
-    fi
     if ! confirm_replace "$target"; then
-      echo "Skipped $target because it already exists." >&2
+      if [[ -d "$target" ]]; then
+        echo "Skipped $target because a directory is already there; move it to install this skill." >&2
+      else
+        echo "Skipped $target because it already exists." >&2
+      fi
       return 0
     fi
     backup="$(backup_target "$target")"
@@ -459,43 +669,54 @@ install_usage_command() {
   esac
 }
 
+# Links are installed under the plain skill name, because that is the name agents
+# load. The saved file may still hold names from before skills gained folders, so
+# only the last path segment is compared.
 remove_old_skill_links() {
-  local skill target expected
+  local entry name
   [[ -f "$SELECTED_FILE" ]] || return 0
-  while IFS= read -r skill; do
-    [[ -n "$skill" ]] || continue
-    has_selected "$skill" && continue
-    for target in "$CLAUDE_DIR/skills/$skill" "$CODEX_DIR/skills/$skill" "$AGENTS_DIR/skills/$skill"; do
-      if [[ "$target" == "$AGENTS_DIR/skills/$skill" ]]; then
-        expected="$ROOT/skills/$skill"
-      else
-        expected="$AGENTS_DIR/skills/$skill"
-      fi
-      if link_points_to "$target" "$expected"; then
-        rm "$target"
-      fi
-    done
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    name="${entry##*/}"
+    selected_installs_name "$name" && continue
+    if link_points_to "$CLAUDE_DIR/skills/$name" "$AGENTS_DIR/skills/$name"; then
+      rm "$CLAUDE_DIR/skills/$name"
+    fi
+    if link_points_to "$CODEX_DIR/skills/$name" "$AGENTS_DIR/skills/$name"; then
+      rm "$CODEX_DIR/skills/$name"
+    fi
+    if link_is_managed "$AGENTS_DIR/skills/$name"; then
+      rm "$AGENTS_DIR/skills/$name"
+    fi
   done < "$SELECTED_FILE"
 }
 
 sync_skills() {
-  local skill source
+  local entry name source installed=""
   remove_old_skill_links
-  for skill in "${SELECTED[@]}"; do
-    source="$ROOT/skills/$skill"
+  for entry in "${SELECTED[@]}"; do
+    name="${entry##*/}"
+    source="$ROOT/skills/${entry%%/*}/$name"
     if [[ ! -f "$source/SKILL.md" ]]; then
-      echo "Selected skill '$skill' no longer exists; skipping it." >&2
+      echo "Selected skill '$entry' no longer exists; skipping it." >&2
       continue
     fi
-    safe_link "$source" "$AGENTS_DIR/skills/$skill"
-    safe_link "$AGENTS_DIR/skills/$skill" "$CLAUDE_DIR/skills/$skill"
-    safe_link "$AGENTS_DIR/skills/$skill" "$CODEX_DIR/skills/$skill"
+    case " $installed " in
+      *" $name "*)
+        echo "Skipped $entry because another folder already installs '$name'." >&2
+        continue
+        ;;
+    esac
+    installed="$installed $name"
+    safe_link "$source" "$AGENTS_DIR/skills/$name"
+    safe_link "$AGENTS_DIR/skills/$name" "$CLAUDE_DIR/skills/$name"
+    safe_link "$AGENTS_DIR/skills/$name" "$CODEX_DIR/skills/$name"
   done
   save_selected
 }
 
 parse_install_options() {
-  local skill_list="" option skill
+  local skill_list="" option skill resolved status
   while [[ $# -gt 0 ]]; do
     option="$1"
     case "$option" in
@@ -512,8 +733,17 @@ parse_install_options() {
     SELECTED=()
     old_ifs="$IFS"; IFS=','; read -ra requested <<< "$skill_list"; IFS="$old_ifs"
     for skill in "${requested[@]}"; do
-      [[ -f "$ROOT/skills/$skill/SKILL.md" ]] || die "unknown skill: $skill"
-      add_selected "$skill"
+      [[ -n "$skill" ]] || continue
+      if is_category "$skill"; then
+        select_category "$skill"
+        continue
+      fi
+      resolved="$(resolve_skill "$skill")" && status=0 || status=$?
+      if [[ $status -eq 2 ]]; then
+        die "several folders contain '$skill'; name it as folder/$skill"
+      fi
+      [[ $status -eq 0 ]] || die "unknown skill: $skill"
+      add_selected "$resolved"
     done
   fi
 }
@@ -549,7 +779,7 @@ skills_command() {
 }
 
 doctor_command() {
-  local failed=0 skill path source
+  local failed=0 skill path source name installed=""
   load_global_state
   if [[ $CONFIG_SELECTED -eq 1 ]]; then
     source="$AGENTS_DIR/AGENTS.md"
@@ -571,8 +801,25 @@ doctor_command() {
   discover_skills
   load_selected
   for skill in "${SELECTED[@]}"; do
-    path="$AGENTS_DIR/skills/$skill"
-    if [[ -e "$path/SKILL.md" ]]; then echo "ok  $skill"; else echo "missing  $skill"; failed=1; fi
+    name="${skill##*/}"
+    path="$AGENTS_DIR/skills/$name"
+    source="$ROOT/skills/${skill%%/*}/$name"
+    case " $installed " in
+      *" $name "*)
+        echo "skipped  $skill; another folder installs '$name'"
+        continue
+        ;;
+    esac
+    installed="$installed $name"
+    if link_points_to "$path" "$source"; then
+      echo "ok  $skill"
+    elif [[ -e "$path/SKILL.md" ]]; then
+      echo "conflict  $path does not point at $source"
+      failed=1
+    else
+      echo "missing  $skill"
+      failed=1
+    fi
   done
   source="$ROOT/bin/usage"
   if [[ -f "$source" ]]; then

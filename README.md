@@ -11,15 +11,24 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
-[x] Global config
-[-] Skills
-    [x] commit
-    [x] goals
-    [x] nice-to-read
-    [ ] work-smart-not-hard
+  [x] Global config
+  [-] Skills
+      [x] jonasw
+    > [-] mattp
+          [x] ask-matt
+          [ ] code-review
+          [x] codebase-design
+          ...
+      [ ] pstack
 ```
 
-Use the arrow keys to move, Space to toggle an item, and Enter to install. Toggling `Skills` selects or clears every skill below it. A `[-]` mark means that only some skills are selected.
+Skills are grouped in folders named after whoever wrote them. Use the arrow keys to
+move, Space to toggle an item, and Enter to install.
+
+- Moving onto a folder lists the skills inside it, and moving away closes it again.
+- Toggling a folder selects or clears every skill in it.
+- Toggling `Skills` selects or clears everything.
+- A `[-]` mark means only some of the skills below are selected.
 
 The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
 
@@ -33,7 +42,11 @@ Global instructions are written to:
 - `~/.claude/CLAUDE.md`, linked to the canonical file
 - `~/.codex/AGENTS.md`, linked to the canonical file
 
-Selected skills are linked into the skill directories for agents, Claude Code, and Codex.
+Selected skills are linked into the skill directories for agents, Claude Code, and
+Codex. A skill is linked under its own name, without the folder, because that is the
+name agents load it by. Two folders can therefore ship a skill with the same name but
+only one of them can be installed: the first selected folder wins, and `agents doctor`
+reports the other as skipped. Deselect the winner if you want the other version.
 
 The installer handles existing configuration without guessing:
 
@@ -85,6 +98,8 @@ agents doctor
 
 `agents update` downloads the newest repository version and restores the saved skill selection. It does not ask for the global configuration again or regenerate those files.
 
+A selection saved before skills were grouped in folders still works: each saved name is matched to the folder it now lives in, and links left pointing at the old location are repaired. A saved skill that has since been removed is reported and dropped.
+
 Run `agents configure` when you want to change the saved answers. Run `agents skills` to reopen the nested skill menu.
 
 ## Non-interactive install
@@ -101,6 +116,13 @@ Select specific skills or skip global configuration:
 ./install.sh --skills nice-to-read,commit --no-config
 ```
 
+`--skills` accepts a folder name to take everything in it, and `folder/name` when the
+same skill name exists in more than one folder:
+
+```sh
+./install.sh --skills jonasw,mattp/teach
+```
+
 The profile prompts also accept these environment variables for automated machine setup:
 
 - `AGENTS_PROFILE_ABOUT_ME`
@@ -111,10 +133,36 @@ The profile prompts also accept these environment variables for automated machin
 
 ## Included skills
 
+Skills live under `skills/<folder>/<name>/SKILL.md`. The folder names whoever wrote
+them, so you can take one person's set without reading through the rest. Adding a
+folder to the repository is enough to make it appear in the menu.
+
+### `jonasw`
+
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
 - `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
+- `html-communication` presents an answer as a self-contained HTML page.
 - `nice-to-read` makes explanations easy to read once and understand.
+- `note` captures a durable note from the current conversation.
+- `research-ricky` researches complex and technical concepts.
+- `rnd` explores an idea before committing to a direction.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
+
+### `mattp`
+
+Matt Pocock's engineering skills: an idea-to-ship flow built from `grill-with-docs`,
+`to-spec`, `to-tickets`, `triage`, `implement`, and `code-review`, plus `teach`,
+`tdd`, `prototype`, `handoff`, `wayfinder`, and the `codebase-design` and
+`domain-modeling` vocabularies. Run `setup-matt-pocock-skills` once per repository
+before using the rest, and `ask-matt` when you want to know which one fits.
+
+### `pstack`
+
+Peter Steinberger's skills: `architect`, `arena`, `swarm`, `interrogate`,
+`figure-it-out`, `how`, `why`, `reflect`, `recall`, `unslop`, `no-comments`,
+`technical-writing`, `typescript-best-practices`, its own `tdd` and `teach`, and a
+large set of `principle-*` skills covering one engineering principle each. Run
+`setup-pstack` once per repository.
 
 ## Development
 

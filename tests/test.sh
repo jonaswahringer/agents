@@ -64,7 +64,8 @@ done
 MENU="$TEST_ROOT/menu.txt"
 "$AGENTS" _menu_snapshot > "$MENU"
 assert_contains "$MENU" "[x] Skills"
-assert_contains "$MENU" "      [x] nice-to-read"
+assert_contains "$MENU" "      [x] jonasw"
+assert_contains "$MENU" "          [x] nice-to-read"
 
 printf '\nA personal line that updates must preserve.\n' >> "$TEST_HOME/.agents/AGENTS.md"
 "$AGENTS" update >/dev/null
@@ -80,11 +81,32 @@ done
 "$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
 "$AGENTS" _menu_snapshot > "$MENU"
 assert_contains "$MENU" "[-] Skills"
-assert_contains "$MENU" "      [x] nice-to-read"
-assert_contains "$MENU" "      [ ] commit"
+assert_contains "$MENU" "      [-] jonasw"
+assert_contains "$MENU" "          [x] nice-to-read"
+assert_contains "$MENU" "          [ ] commit"
 
+# A folder name selects every skill in it, and a saved bare name still resolves.
+"$ROOT/install.sh" --skills jonasw --no-config >/dev/null
+"$AGENTS" _menu_snapshot > "$MENU"
+assert_contains "$MENU" "      [x] jonasw"
+assert_contains "$MENU" "      [ ] mattp"
+for skill in nice-to-read commit goals work-smart-not-hard; do
+  assert_link "$TEST_HOME/.agents/skills/$skill"
+done
+assert_missing "$TEST_HOME/.agents/skills/teach"
+
+"$ROOT/install.sh" --skills mattp/teach --no-config >/dev/null
+assert_link "$TEST_HOME/.agents/skills/teach"
+assert_missing "$TEST_HOME/.agents/skills/commit"
+
+# Two folders ship a skill called "teach"; the first selected folder installs it
+# and the other is reported as skipped rather than silently overwriting the link.
 "$AGENTS" skills --all >/dev/null
-"$AGENTS" doctor >/dev/null
+"$AGENTS" doctor > "$TEST_ROOT/doctor.txt"
+assert_contains "$TEST_ROOT/doctor.txt" "ok  mattp/teach"
+assert_contains "$TEST_ROOT/doctor.txt" "skipped  pstack/teach"
+INSTALLED_ROOT="$(cd "$TEST_HOME/.local/share/agents/source" && pwd)"
+[[ "$(readlink "$TEST_HOME/.agents/skills/teach")" == "$INSTALLED_ROOT/skills/mattp/teach" ]] || fail "teach should come from the first selected folder"
 
 NO_CONFIG_HOME="$TEST_ROOT/no-config-home"
 HOME="$NO_CONFIG_HOME" "$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
@@ -140,5 +162,17 @@ assert_link "$CANONICAL_HOME/.claude/CLAUDE.md"
 assert_link "$CANONICAL_HOME/.codex/AGENTS.md"
 HOME="$CANONICAL_HOME" "$CANONICAL_HOME/.local/bin/agents" doctor >/dev/null
 
-echo "PASS: installer, nested skills, deduplication, conflicts, and migrations"
+# A selection saved before skills were grouped in folders keeps working, and a link
+# left pointing at the old flat path is repaired without asking for approval.
+MIGRATE_HOME="$TEST_ROOT/migrate-home"
+HOME="$MIGRATE_HOME" "$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
+MIGRATE_ROOT="$(cd "$MIGRATE_HOME/.local/share/agents/source" && pwd)"
+printf 'nice-to-read\n' > "$MIGRATE_HOME/.config/agents/selected-skills"
+rm "$MIGRATE_HOME/.agents/skills/nice-to-read"
+ln -s "$MIGRATE_ROOT/skills/nice-to-read" "$MIGRATE_HOME/.agents/skills/nice-to-read"
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update >/dev/null
+[[ "$(readlink "$MIGRATE_HOME/.agents/skills/nice-to-read")" == "$MIGRATE_ROOT/skills/jonasw/nice-to-read" ]] || fail "a link left by the flat layout should be repointed at the folder"
+assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice-to-read"
+
+echo "PASS: installer, skill folders, deduplication, conflicts, and migrations"
 python3 "$ROOT/tests/test_usage.py"
