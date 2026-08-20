@@ -802,7 +802,7 @@ skills_command() {
 }
 
 doctor_command() {
-  local failed=0 skill path source name installed=""
+  local failed=0 skill path source name installed="" missing line
   load_global_state
   if [[ $CONFIG_SELECTED -eq 1 ]]; then
     source="$AGENTS_DIR/AGENTS.md"
@@ -821,11 +821,15 @@ doctor_command() {
     if [[ -f "$source" ]]; then
       if ! grep -q 'Managed by agents' "$source" 2>/dev/null; then
         echo "skip  $source holds separate instructions, so the template check does not apply"
-      elif render_template_content "$ROOT/templates/AGENTS.md" | cmp -s - "$source"; then
-        echo "ok  $source matches the template and the configured answers"
       else
-        echo "stale  $source differs from the template and the configured answers; run 'agents configure' to regenerate it"
-        failed=1
+        missing="$(render_template_content "$ROOT/templates/AGENTS.md" | grep -vE '^[[:space:]]*$' | grep -Fxvf "$source" || true)"
+        if [[ -z "$missing" ]]; then
+          echo "ok  $source contains the template instructions and the configured answers"
+        else
+          echo "stale  $source is missing lines from the template or the configured answers; run 'agents configure' to regenerate it:"
+          while IFS= read -r line; do echo "        $line"; done <<< "$missing"
+          failed=1
+        fi
       fi
     fi
   else

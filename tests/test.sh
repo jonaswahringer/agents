@@ -55,6 +55,20 @@ assert_file "$TEST_HOME/.claude/CLAUDE.md.backup-"* 2>/dev/null || fail "expecte
 assert_file "$TEST_HOME/.codex/AGENTS.md.backup-"* 2>/dev/null || fail "expected the old Codex config to be backed up"
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "I build developer tools."
 
+# Doctor checks the generated config still carries the template instructions and
+# the configured answers. Personal additions are fine; removed lines are not.
+"$AGENTS" doctor > "$TEST_ROOT/config-doctor.txt" || fail "doctor should pass on a fresh install"
+assert_contains "$TEST_ROOT/config-doctor.txt" "contains the template instructions and the configured answers"
+grep -v "I build developer tools." "$TEST_HOME/.agents/AGENTS.md" > "$TEST_HOME/.agents/AGENTS.md.tmp"
+mv "$TEST_HOME/.agents/AGENTS.md.tmp" "$TEST_HOME/.agents/AGENTS.md"
+if "$AGENTS" doctor > "$TEST_ROOT/stale-doctor.txt"; then
+  fail "doctor should fail when a configured answer is missing from the config"
+fi
+assert_contains "$TEST_ROOT/stale-doctor.txt" "stale"
+assert_contains "$TEST_ROOT/stale-doctor.txt" "I build developer tools."
+printf 'I build developer tools.\n' >> "$TEST_HOME/.agents/AGENTS.md"
+"$AGENTS" doctor >/dev/null || fail "doctor should pass once the configured answer is back"
+
 for skill in nice-to-read commit goals work-smart-not-hard; do
   assert_link "$TEST_HOME/.agents/skills/$skill"
   assert_link "$TEST_HOME/.claude/skills/$skill"
@@ -160,7 +174,8 @@ HOME="$CANONICAL_HOME" "$ROOT/install.sh" --all >/dev/null 2> "$TEST_ROOT/canoni
 assert_contains "$CANONICAL_HOME/.agents/AGENTS.md" "My existing canonical instructions."
 assert_link "$CANONICAL_HOME/.claude/CLAUDE.md"
 assert_link "$CANONICAL_HOME/.codex/AGENTS.md"
-HOME="$CANONICAL_HOME" "$CANONICAL_HOME/.local/bin/agents" doctor >/dev/null
+HOME="$CANONICAL_HOME" "$CANONICAL_HOME/.local/bin/agents" doctor > "$TEST_ROOT/canonical-doctor.txt"
+assert_contains "$TEST_ROOT/canonical-doctor.txt" "holds separate instructions, so the template check does not apply"
 
 # A selection saved before skills were grouped in folders keeps working, and a link
 # left pointing at the old flat path is repaired without asking for approval.
