@@ -40,6 +40,7 @@ agents manages shared instructions and skills for coding agents.
 
 Usage:
   agents update              Update the tool and selected skills
+  agents update --skills     Update, then open the skill menu
   agents configure           Edit the saved global configuration
   agents skills              Choose installed skills
   agents doctor              Check the current installation
@@ -390,11 +391,27 @@ interactive_menu() {
       toggle_row "$cursor"
     elif [[ -z "$key" ]]; then
       printf '\033[2J\033[H' > /dev/tty
-      return
+      return 0
     elif [[ "$key" == "q" ]]; then
-      die "setup cancelled"
+      printf '\033[2J\033[H' > /dev/tty
+      return 1
     fi
   done
+}
+
+# Counts what an update just made available but did not install, so a new folder in
+# the repository does not arrive silently.
+report_unselected_skills() {
+  local skill count=0
+  for skill in "${SKILLS[@]}"; do
+    if ! has_selected "$skill"; then
+      count=$((count + 1))
+    fi
+  done
+  if [[ $count -gt 0 ]]; then
+    echo "$count more skills are available. Run 'agents skills' to choose them."
+  fi
+  return 0
 }
 
 read_profile_value() {
@@ -496,6 +513,10 @@ render_template() {
   elif [[ $prepare_status -ne 0 ]]; then
     return "$prepare_status"
   fi
+  render_template_content "$template" > "$target"
+}
+
+render_template_content() {
   awk -v profile="$PROFILE_DIR" '
     function emit(path, line) {
       while ((getline line < path) > 0) print line
@@ -507,7 +528,7 @@ render_template() {
     $0 == "{{SYNC}}" { emit(profile "/sync"); next }
     $0 == "{{TOOLING}}" { emit(profile "/tooling"); next }
     { print }
-  ' "$template" > "$target"
+  ' "$1"
 }
 
 install_shared_config_link() {
@@ -753,7 +774,9 @@ install_command() {
   load_selected
   load_global_state
   parse_install_options "$@"
-  if [[ $NON_INTERACTIVE -eq 0 ]]; then interactive_menu 1; fi
+  if [[ $NON_INTERACTIVE -eq 0 ]]; then
+    interactive_menu 1 || die "setup cancelled"
+  fi
   [[ $CONFIG_SELECTED -eq 0 ]] || configure_global
   save_global_state
   sync_skills
@@ -772,7 +795,7 @@ skills_command() {
   elif [[ $# -gt 0 ]]; then
     die "usage: agents skills [--all|--none]"
   else
-    interactive_menu 0
+    interactive_menu 0 || die "setup cancelled"
   fi
   sync_skills
   echo "Selected skills updated."
@@ -795,6 +818,16 @@ doctor_command() {
         failed=1
       fi
     done
+    if [[ -f "$source" ]]; then
+      if ! grep -q 'Managed by agents' "$source" 2>/dev/null; then
+        echo "skip  $source holds separate instructions, so the template check does not apply"
+      elif render_template_content "$ROOT/templates/AGENTS.md" | cmp -s - "$source"; then
+        echo "ok  $source matches the template and the configured answers"
+      else
+        echo "stale  $source differs from the template and the configured answers; run 'agents configure' to regenerate it"
+        failed=1
+      fi
+    fi
   else
     echo "skip  global config was not selected"
   fi
@@ -839,25 +872,44 @@ update_command() {
   if [[ -n "${AGENTS_SOURCE_DIR:-}" ]]; then
     bootstrap="$AGENTS_SOURCE_DIR/install.sh"
     [[ -f "$bootstrap" ]] || die "AGENTS_SOURCE_DIR does not contain install.sh"
-    bash "$bootstrap" --update
+    bash "$bootstrap" --update "$@"
   else
     tmp="$(mktemp "${TMPDIR:-/tmp}/agents-bootstrap.XXXXXX")"
     trap 'rm -f "$tmp"' EXIT
     curl -fsSL "https://raw.githubusercontent.com/${AGENTS_REPOSITORY:-jonaswahringer/agents}/${AGENTS_REF:-main}/install.sh" -o "$tmp"
-    bash "$tmp" --update
+    bash "$tmp" --update "$@"
   fi
 }
 
 reconcile_command() {
+  local open_menu=0 option
+  while [[ $# -gt 0 ]]; do
+    option="$1"
+    case "$option" in
+      --skills) open_menu=1 ;;
+      *) die "unknown option: $option" ;;
+    esac
+    shift
+  done
   discover_skills
   load_selected
   load_global_state
+  # Cancelling the menu, or having no terminal to draw it on, keeps the saved
+  # selection instead of failing the update and rolling the new version back.
+  if [[ $open_menu -eq 1 ]]; then
+    if [[ -r /dev/tty && -w /dev/tty ]]; then
+      interactive_menu 0 || echo "Kept the saved skill selection."
+    else
+      echo "No terminal available for the skill menu; kept the saved selection." >&2
+    fi
+  fi
   if [[ $CONFIG_SELECTED -eq 1 ]]; then
     NON_INTERACTIVE=1
     install_global_config_links
   fi
   sync_skills
   install_usage_command
+  report_unselected_skills
 }
 
 case "${1:-help}" in

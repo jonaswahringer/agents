@@ -170,9 +170,22 @@ MIGRATE_ROOT="$(cd "$MIGRATE_HOME/.local/share/agents/source" && pwd)"
 printf 'nice-to-read\n' > "$MIGRATE_HOME/.config/agents/selected-skills"
 rm "$MIGRATE_HOME/.agents/skills/nice-to-read"
 ln -s "$MIGRATE_ROOT/skills/nice-to-read" "$MIGRATE_HOME/.agents/skills/nice-to-read"
-HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update >/dev/null
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update > "$TEST_ROOT/update.txt"
 [[ "$(readlink "$MIGRATE_HOME/.agents/skills/nice-to-read")" == "$MIGRATE_ROOT/skills/jonasw/nice-to-read" ]] || fail "a link left by the flat layout should be repointed at the folder"
 assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice-to-read"
+
+# An update says how many skills it left out, so a new folder does not arrive silently.
+assert_contains "$TEST_ROOT/update.txt" "more skills are available. Run 'agents skills' to choose them."
+if ! HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update --bogus 2>/dev/null; then
+  :
+else
+  fail "update should reject an unknown option instead of ignoring it"
+fi
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" skills --all >/dev/null 2>&1
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update 2>/dev/null > "$TEST_ROOT/update-all.txt"
+if grep -q "more skills are available" "$TEST_ROOT/update-all.txt"; then
+  fail "update should stay quiet when every skill is selected"
+fi
 
 echo "PASS: installer, skill folders, deduplication, conflicts, and migrations"
 python3 "$ROOT/tests/test_usage.py"

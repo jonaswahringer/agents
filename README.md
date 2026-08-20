@@ -91,6 +91,7 @@ is in use.
 
 ```sh
 agents update
+agents update --skills
 agents configure
 agents skills
 agents doctor
@@ -100,7 +101,12 @@ agents doctor
 
 A selection saved before skills were grouped in folders still works: each saved name is matched to the folder it now lives in, and links left pointing at the old location are repaired. A saved skill that has since been removed is reported and dropped.
 
-Run `agents configure` when you want to change the saved answers. Run `agents skills` to reopen the nested skill menu.
+An update never changes the selection on its own, so it ends by saying how many
+skills it left out. Run `agents update --skills` to open the menu straight after
+updating, or `agents skills` at any time to reopen it. Cancelling that menu with `q`
+keeps the saved selection and still finishes the update.
+
+Run `agents configure` when you want to change the saved answers.
 
 ## Non-interactive install
 
