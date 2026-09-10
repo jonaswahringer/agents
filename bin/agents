@@ -122,6 +122,9 @@ category_fully_selected() {
 # Exit 1 means no such skill, exit 2 means the bare name is in several folders.
 resolve_skill() {
   local wanted="$1" skill matches=""
+  case "$wanted" in
+    nice-to-read|jonasw/nice-to-read) wanted="jonasw/nice" ;;
+  esac
   for skill in "${SKILLS[@]}"; do
     if [[ "$skill" == "$wanted" || "${skill##*/}" == "$wanted" ]]; then
       matches="$matches $skill"
@@ -154,6 +157,12 @@ has_selected() {
 
 add_selected() {
   has_selected "$1" || SELECTED+=("$1")
+}
+
+ensure_global_response_skill() {
+  if [[ $CONFIG_SELECTED -eq 1 ]]; then
+    add_selected "jonasw/nice"
+  fi
 }
 
 remove_selected() {
@@ -531,6 +540,30 @@ render_template_content() {
   ' "$1"
 }
 
+migrate_managed_global_config() {
+  local source="$AGENTS_DIR/AGENTS.md" temporary
+  [[ -f "$source" ]] || return 0
+  grep -q 'Managed by agents' "$source" 2>/dev/null || return 0
+  temporary="$(mktemp "$AGENTS_DIR/.AGENTS.md.XXXXXX")"
+  awk '
+    $0 == "Apply the `unslop` skill to every response you write. Before sending any user-facing text, follow its process to strip AI-writing patterns and keep a human voice." {
+      print "Apply the `nice` skill to every user-facing response."
+      next
+    }
+    $0 == "Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks." {
+      print "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements."
+      next
+    }
+    { print }
+  ' "$source" > "$temporary"
+  if cmp -s "$source" "$temporary"; then
+    rm "$temporary"
+  else
+    mv "$temporary" "$source"
+    echo "Updated the managed global response instructions."
+  fi
+}
+
 install_shared_config_link() {
   local source="$1" target="$2" backup
   mkdir -p "$(dirname "$target")"
@@ -700,10 +733,10 @@ remove_old_skill_links() {
     [[ -n "$entry" ]] || continue
     name="${entry##*/}"
     selected_installs_name "$name" && continue
-    if link_points_to "$CLAUDE_DIR/skills/$name" "$AGENTS_DIR/skills/$name"; then
+    if link_points_to "$CLAUDE_DIR/skills/$name" "$AGENTS_DIR/skills/$name" || link_is_managed "$CLAUDE_DIR/skills/$name"; then
       rm "$CLAUDE_DIR/skills/$name"
     fi
-    if link_points_to "$CODEX_DIR/skills/$name" "$AGENTS_DIR/skills/$name"; then
+    if link_points_to "$CODEX_DIR/skills/$name" "$AGENTS_DIR/skills/$name" || link_is_managed "$CODEX_DIR/skills/$name"; then
       rm "$CODEX_DIR/skills/$name"
     fi
     if link_is_managed "$AGENTS_DIR/skills/$name"; then
@@ -777,6 +810,7 @@ install_command() {
   if [[ $NON_INTERACTIVE -eq 0 ]]; then
     interactive_menu 1 || die "setup cancelled"
   fi
+  ensure_global_response_skill
   [[ $CONFIG_SELECTED -eq 0 ]] || configure_global
   save_global_state
   sync_skills
@@ -788,6 +822,7 @@ install_command() {
 skills_command() {
   discover_skills
   load_selected
+  load_global_state
   if [[ "${1:-}" == "--all" ]]; then
     select_all_skills
   elif [[ "${1:-}" == "--none" ]]; then
@@ -797,6 +832,7 @@ skills_command() {
   else
     interactive_menu 0 || die "setup cancelled"
   fi
+  ensure_global_response_skill
   sync_skills
   echo "Selected skills updated."
 }
@@ -837,6 +873,7 @@ doctor_command() {
   fi
   discover_skills
   load_selected
+  ensure_global_response_skill
   for skill in "${SELECTED[@]}"; do
     name="${skill##*/}"
     path="$AGENTS_DIR/skills/$name"
@@ -908,7 +945,9 @@ reconcile_command() {
       echo "No terminal available for the skill menu; kept the saved selection." >&2
     fi
   fi
+  ensure_global_response_skill
   if [[ $CONFIG_SELECTED -eq 1 ]]; then
+    migrate_managed_global_config
     NON_INTERACTIVE=1
     install_global_config_links
   fi
@@ -922,7 +961,7 @@ case "${1:-help}" in
   _reconcile) shift; reconcile_command "$@" ;;
   _menu_snapshot) shift; discover_skills; load_selected; load_global_state; render_menu 1 -1 ;;
   update) shift; update_command "$@" ;;
-  configure) shift; discover_skills; load_selected; parse_install_options "$@"; CONFIG_SELECTED=1; configure_global; save_global_state ;;
+  configure) shift; discover_skills; load_selected; parse_install_options "$@"; CONFIG_SELECTED=1; ensure_global_response_skill; configure_global; save_global_state; sync_skills ;;
   skills) shift; skills_command "$@" ;;
   doctor) shift; doctor_command "$@" ;;
   help|-h|--help) usage ;;

@@ -30,8 +30,8 @@ Show the commit message and ask before running `git commit`. Ask again before pu
 
 ## How to respond
 
-Apply the `unslop` skill to every response you write. Before sending any user-facing text, follow its process to strip AI-writing patterns and keep a human voice.
+Apply the `nice` skill to every user-facing response.
 
-Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks.
+Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements.
 
 Plan non-trivial work before making large changes. Keep me informed while the work is in progress.
