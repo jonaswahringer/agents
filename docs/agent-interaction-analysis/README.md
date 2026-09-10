@@ -28,12 +28,13 @@ logs can miss cloud-only, deleted, remote, or unsynchronised conversations.
   improvements.
 - [Private MacBook data inventory](macbook-data-inventory.md) — the separate
   machine's available evidence, partial data, and coverage limits.
+- [Combined requirements](combined-requirements.md) — shared findings, final
+  implementation requirements, machine-specific limits, and remaining uncertainty.
 - [Parallel analysis prompt](parallel-analysis-prompt.md) — the prompt used for the
   separate machine's analysis.
 
 ## Current status
 
-This is an analysis-only snapshot. No global config, rule, or skill was changed as
-part of these reviews. The Mac mini and private MacBook reports should be compared
-before creating or restructuring a personalized `nice` skill or changing shared
-agent instructions.
+The machine reports remain evidence snapshots. The combined requirements document
+records the decisions derived from both reports and keeps machine-specific findings
+separate.
