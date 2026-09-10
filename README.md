@@ -48,6 +48,10 @@ name agents load it by. Two folders can therefore ship a skill with the same nam
 only one of them can be installed: the first selected folder wins, and `agents doctor`
 reports the other as skipped. Deselect the winner if you want the other version.
 
+The global instructions use `jonasw/nice`, so selecting global configuration also
+selects that skill. Other skills remain optional. The installer rejects a skill if
+its required front matter is missing or its `name` does not match its directory.
+
 The installer handles existing configuration without guessing:
 
 - A link that already resolves to the canonical file is kept.
@@ -97,14 +101,21 @@ agents skills
 agents doctor
 ```
 
-`agents update` downloads the newest repository version and restores the saved skill selection. It does not ask for the global configuration again or regenerate those files.
+`agents update` downloads the newest repository version and restores the saved
+skill selection. It does not ask for the global configuration again or regenerate
+the file. It can replace known legacy lines in an installer-managed global file
+while preserving profile answers and personal additions.
 
 A selection saved before skills were grouped in folders still works: each saved name is matched to the folder it now lives in, and links left pointing at the old location are repaired. A saved skill that has since been removed is reported and dropped.
 
-An update never changes the selection on its own, so it ends by saying how many
-skills it left out. Run `agents update --skills` to open the menu straight after
-updating, or `agents skills` at any time to reopen it. Cancelling that menu with `q`
-keeps the saved selection and still finishes the update.
+An update does not change optional skill selections. It only ensures that `nice` is
+present when global configuration is enabled. The update ends by saying how many
+optional skills it left out. Run `agents update --skills` to open the menu straight
+after updating, or `agents skills` at any time to reopen it. Cancelling that menu
+with `q` keeps the saved selection and still finishes the update.
+
+For the same reason, `agents skills --none` keeps `nice` while global configuration
+is enabled. Install with `--no-config` to manage skills without that requirement.
 
 Run `agents configure` when you want to change the saved answers.
 
@@ -119,7 +130,7 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 Select specific skills or skip global configuration:
 
 ```sh
-./install.sh --skills nice-to-read,commit --no-config
+./install.sh --skills nice,commit --no-config
 ```
 
 `--skills` accepts a folder name to take everything in it, and `folder/name` when the
@@ -148,7 +159,7 @@ folder to the repository is enough to make it appear in the menu.
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
 - `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
 - `html-communication` presents an answer as a self-contained HTML page.
-- `nice-to-read` makes explanations easy to read once and understand.
+- `nice` makes user-facing answers concise, plain, direct, and honest about evidence.
 - `note` captures a durable note from the current conversation.
 - `research-ricky` researches complex and technical concepts.
 - `rnd` explores an idea before committing to a direction.
@@ -169,6 +180,11 @@ Peter Steinberger's skills: `architect`, `arena`, `swarm`, `interrogate`,
 `technical-writing`, `typescript-best-practices`, its own `tdd` and `teach`, and a
 large set of `principle-*` skills covering one engineering principle each. Run
 `setup-pstack` once per repository.
+
+Saved `nice-to-read` selections migrate to `jonasw/nice` during installation or
+update. The old managed links are removed. `pstack/unslop` remains available for
+explicit prose editing, but the global instructions no longer require it for every
+response.
 
 ## Development
 

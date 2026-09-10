@@ -14,6 +14,7 @@ This repository installs shared agent instructions and skills.
 - Read folders from disk instead of listing them in code, so a new folder needs no installer change.
 - Store a selection as `folder/name`, and keep resolving names saved before folders existed.
 - Install a skill under its plain name, because that is the name agents load it by.
+- Require valid front matter, and keep each skill's `name` equal to its directory name.
 
 ## Safety
 

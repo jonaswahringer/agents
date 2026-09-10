@@ -65,6 +65,131 @@ die() {
   exit 1
 }
 
+validate_skill_metadata() {
+  local path="$1" expected="$2" error
+  if ! error="$(awk -v expected="$expected" '
+    function trim(value) {
+      sub(/^[[:space:]]+/, "", value)
+      sub(/[[:space:]]+$/, "", value)
+      return value
+    }
+    function valid_hex(value, start, count, i, character) {
+      for (i = start; i < start + count; i++) {
+        character = substr(value, i, 1)
+        if (character !~ /^[0-9a-fA-F]$/) return 0
+      }
+      return 1
+    }
+    function valid_double_quoted(value, i, character, escape, count, rest) {
+      if (length(value) < 2) return 0
+      for (i = 2; i <= length(value); i++) {
+        character = substr(value, i, 1)
+        if (character == "\"") {
+          if (i == 2) return 0
+          rest = substr(value, i + 1)
+          return rest == "" || rest ~ /^[[:space:]]+#/
+        }
+        if (character == "\\") {
+          i++
+          if (i > length(value)) return 0
+          escape = substr(value, i, 1)
+          if (escape ~ /^[0abtnvfre "\/\\N_LP]$/) continue
+          if (escape == "x") count = 2
+          else if (escape == "u") count = 4
+          else if (escape == "U") count = 8
+          else return 0
+          if (!valid_hex(value, i + 1, count)) return 0
+          i += count
+        }
+      }
+      return 0
+    }
+    function valid_single_quoted(value, i, rest) {
+      if (length(value) < 2) return 0
+      for (i = 2; i <= length(value); i++) {
+        if (substr(value, i, 1) == "\047") {
+          if (substr(value, i + 1, 1) == "\047") {
+            i++
+          } else {
+            if (i == 2) return 0
+            rest = substr(value, i + 1)
+            return rest == "" || rest ~ /^[[:space:]]+#/
+          }
+        }
+      }
+      return 0
+    }
+    function strip_plain_comment(value, i) {
+      for (i = 1; i <= length(value); i++) {
+        if (substr(value, i, 1) == "#" && (i == 1 || substr(value, i - 1, 1) ~ /[[:space:]]/)) {
+          return trim(substr(value, 1, i - 1))
+        }
+      }
+      return value
+    }
+    function valid_description(value, first, plain) {
+      if (value ~ /^[>|][+-]?$/) return block_content
+      first = substr(value, 1, 1)
+      if (first == "\"") return valid_double_quoted(value)
+      if (first == "\047") return valid_single_quoted(value)
+      plain = strip_plain_comment(value)
+      if (plain ~ /^[>|][+-]?$/) return block_content
+      first = substr(plain, 1, 1)
+      if (plain == "" || first == "[" || first == "{") return 0
+      if (plain ~ /:[[:space:]]/) return 0
+      return 1
+    }
+    NR == 1 {
+      if ($0 != "---") problem = "front matter must start with ---"
+      next
+    }
+    !closed && $0 == "---" {
+      closed = 1
+      next
+    }
+    !closed && description_block && /^[[:space:]]+/ {
+      block_line = trim($0)
+      if (block_line != "") block_content = 1
+      next
+    }
+    !closed && /^name:[[:space:]]*/ {
+      description_block = 0
+      name_count++
+      name = $0
+      sub(/^name:[[:space:]]*/, "", name)
+      name = trim(name)
+      next
+    }
+    !closed && /^description:[[:space:]]*/ {
+      description_count++
+      description = $0
+      sub(/^description:[[:space:]]*/, "", description)
+      description = trim(description)
+      if (strip_plain_comment(description) ~ /^[>|][+-]?$/) description_block = 1
+      next
+    }
+    !closed && /^[^[:space:]]/ {
+      description_block = 0
+    }
+    END {
+      if (problem != "") print problem
+      else if (!closed) print "front matter must end with ---"
+      else if (name_count != 1) print "front matter needs one name field"
+      else if (name != expected) print "name must match its directory: " expected
+      else if (length(name) > 64 || name !~ /^[a-z0-9][a-z0-9-]*$/) print "name must use at most 64 lowercase letters, numbers, or hyphens"
+      else if (description_count != 1 || description == "" || description == "\"\"" || description == "\047\047") print "front matter needs one non-empty description field"
+      else if (!valid_description(description)) print "description must be a valid non-empty string"
+    }
+  ' "$path")"; then
+    echo "agents: could not parse skill metadata in $path" >&2
+    return 1
+  fi
+  if [[ -n "$error" ]]; then
+    echo "agents: invalid skill metadata in $path: $error" >&2
+    return 1
+  fi
+}
+
 # Skills live at skills/<folder>/<name>/SKILL.md, where the folder names whoever
 # wrote them. A selection is always stored as "folder/name". Folders are read from
 # disk, so adding one to the repository is enough to make it appear in the menu.
@@ -78,6 +203,7 @@ discover_skills() {
     found=0
     for skill_directory in "$category_directory"/*; do
       if [[ -f "$skill_directory/SKILL.md" ]]; then
+        validate_skill_metadata "$skill_directory/SKILL.md" "$(basename "$skill_directory")" || die "fix the skill metadata before installing"
         SKILLS+=("$category/$(basename "$skill_directory")")
         found=1
       fi

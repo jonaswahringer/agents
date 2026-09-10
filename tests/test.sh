@@ -32,6 +32,12 @@ assert_contains() {
   grep -Fq "$2" "$1" || fail "expected $1 to contain: $2"
 }
 
+assert_not_contains() {
+  if grep -Fq "$2" "$1"; then
+    fail "expected $1 not to contain: $2"
+  fi
+}
+
 mkdir -p "$TEST_HOME/.claude" "$TEST_HOME/.codex"
 printf '<!-- Managed by agents. Run `agents configure` to regenerate this file. -->\n\nOld generated Claude config.\n' > "$TEST_HOME/.claude/CLAUDE.md"
 printf 'old local instructions\n' > "$TEST_HOME/.codex/AGENTS.md"
@@ -54,6 +60,8 @@ assert_link "$TEST_HOME/.codex/AGENTS.md"
 assert_file "$TEST_HOME/.claude/CLAUDE.md.backup-"* 2>/dev/null || fail "expected the managed Claude config to be backed up"
 assert_file "$TEST_HOME/.codex/AGENTS.md.backup-"* 2>/dev/null || fail "expected the old Codex config to be backed up"
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "I build developer tools."
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `nice` skill to every user-facing response.'
+assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `unslop` skill to every response'
 
 # Doctor checks the generated config still carries the template instructions and
 # the configured answers. Personal additions are fine; removed lines are not.
@@ -69,7 +77,7 @@ assert_contains "$TEST_ROOT/stale-doctor.txt" "I build developer tools."
 printf 'I build developer tools.\n' >> "$TEST_HOME/.agents/AGENTS.md"
 "$AGENTS" doctor >/dev/null || fail "doctor should pass once the configured answer is back"
 
-for skill in nice-to-read commit goals work-smart-not-hard; do
+for skill in nice commit goals work-smart-not-hard; do
   assert_link "$TEST_HOME/.agents/skills/$skill"
   assert_link "$TEST_HOME/.claude/skills/$skill"
   assert_link "$TEST_HOME/.codex/skills/$skill"
@@ -79,11 +87,25 @@ MENU="$TEST_ROOT/menu.txt"
 "$AGENTS" _menu_snapshot > "$MENU"
 assert_contains "$MENU" "[x] Skills"
 assert_contains "$MENU" "      [x] jonasw"
-assert_contains "$MENU" "          [x] nice-to-read"
+assert_contains "$MENU" "          [x] nice"
 
+awk '
+  $0 == "Apply the `nice` skill to every user-facing response." {
+    print "Apply the `unslop` skill to every response you write. Before sending any user-facing text, follow its process to strip AI-writing patterns and keep a human voice."
+    next
+  }
+  $0 == "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements." {
+    print "Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks."
+    next
+  }
+  { print }
+' "$TEST_HOME/.agents/AGENTS.md" > "$TEST_HOME/.agents/AGENTS.md.tmp"
+mv "$TEST_HOME/.agents/AGENTS.md.tmp" "$TEST_HOME/.agents/AGENTS.md"
 printf '\nA personal line that updates must preserve.\n' >> "$TEST_HOME/.agents/AGENTS.md"
 "$AGENTS" update >/dev/null
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "A personal line that updates must preserve."
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `nice` skill to every user-facing response.'
+assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `unslop` skill to every response'
 
 # Branch archives may be cached even though update says it is downloading. A
 # fresh update request must not reuse an older response for the same branch URL.
@@ -99,7 +121,7 @@ tar -C "$UPDATE_FIXTURE/latest" -czf "$UPDATE_FIXTURE/latest.tar.gz" agents-main
 cp "$ROOT/tests/fake-update-curl.sh" "$UPDATE_FIXTURE/bin/curl"
 chmod +x "$UPDATE_FIXTURE/bin/curl"
 HOME="$UPDATE_HOME" AGENTS_SOURCE_DIR="$UPDATE_FIXTURE/cached/agents-main" \
-  "$UPDATE_FIXTURE/cached/agents-main/install.sh" --skills nice-to-read --no-config >/dev/null
+  "$UPDATE_FIXTURE/cached/agents-main/install.sh" --skills nice --no-config >/dev/null
 PATH="$UPDATE_FIXTURE/bin:$PATH" \
 FAKE_UPDATE_INSTALLER="$ROOT/install.sh" \
 FAKE_UPDATE_CACHED_ARCHIVE="$UPDATE_FIXTURE/cached.tar.gz" \
@@ -110,17 +132,20 @@ assert_contains "$UPDATE_HOME/.local/share/agents/source/update-version" "latest
 assert_contains "$UPDATE_FIXTURE/output.txt" "Updating agents..."
 
 "$AGENTS" skills --none >/dev/null
-for skill in nice-to-read commit goals work-smart-not-hard; do
+for skill in commit goals work-smart-not-hard; do
   assert_missing "$TEST_HOME/.agents/skills/$skill"
   assert_missing "$TEST_HOME/.claude/skills/$skill"
   assert_missing "$TEST_HOME/.codex/skills/$skill"
 done
+assert_link "$TEST_HOME/.agents/skills/nice"
+assert_link "$TEST_HOME/.claude/skills/nice"
+assert_link "$TEST_HOME/.codex/skills/nice"
 
-"$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
+"$ROOT/install.sh" --skills nice --no-config >/dev/null
 "$AGENTS" _menu_snapshot > "$MENU"
 assert_contains "$MENU" "[-] Skills"
 assert_contains "$MENU" "      [-] jonasw"
-assert_contains "$MENU" "          [x] nice-to-read"
+assert_contains "$MENU" "          [x] nice"
 assert_contains "$MENU" "          [ ] commit"
 
 # A folder name selects every skill in it, and a saved bare name still resolves.
@@ -128,7 +153,7 @@ assert_contains "$MENU" "          [ ] commit"
 "$AGENTS" _menu_snapshot > "$MENU"
 assert_contains "$MENU" "      [x] jonasw"
 assert_contains "$MENU" "      [ ] mattp"
-for skill in nice-to-read commit goals work-smart-not-hard; do
+for skill in nice commit goals work-smart-not-hard; do
   assert_link "$TEST_HOME/.agents/skills/$skill"
 done
 assert_missing "$TEST_HOME/.agents/skills/teach"
@@ -147,9 +172,84 @@ INSTALLED_ROOT="$(cd "$TEST_HOME/.local/share/agents/source" && pwd)"
 [[ "$(readlink "$TEST_HOME/.agents/skills/teach")" == "$INSTALLED_ROOT/skills/mattp/teach" ]] || fail "teach should come from the first selected folder"
 
 NO_CONFIG_HOME="$TEST_ROOT/no-config-home"
-HOME="$NO_CONFIG_HOME" "$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
+HOME="$NO_CONFIG_HOME" "$ROOT/install.sh" --skills nice --no-config >/dev/null
 HOME="$NO_CONFIG_HOME" "$NO_CONFIG_HOME/.local/bin/agents" doctor > "$TEST_ROOT/no-config-doctor.txt"
 assert_contains "$TEST_ROOT/no-config-doctor.txt" "skip  global config was not selected"
+
+INVALID_SOURCE="$TEST_ROOT/invalid-source"
+INVALID_HOME="$TEST_ROOT/invalid-home"
+mkdir -p "$INVALID_SOURCE" "$INVALID_SOURCE/skills/test/broken"
+tar -C "$ROOT" --exclude=.git --exclude=bin/__pycache__ -cf - . | tar -C "$INVALID_SOURCE" -xf -
+cat > "$INVALID_SOURCE/skills/test/broken/SKILL.md" <<'EOF'
+---
+name: broken
+description: "unterminated
+---
+
+# Broken
+EOF
+if HOME="$INVALID_HOME" AGENTS_SOURCE_DIR="$INVALID_SOURCE" \
+  "$INVALID_SOURCE/install.sh" --skills broken --no-config >/dev/null 2> "$TEST_ROOT/invalid-skill.txt"; then
+  fail "installation should reject invalid skill metadata"
+fi
+assert_contains "$TEST_ROOT/invalid-skill.txt" "description must be a valid non-empty string"
+cat > "$INVALID_SOURCE/skills/test/broken/SKILL.md" <<'EOF'
+---
+name: broken
+description: "" # an empty string is still invalid
+---
+
+# Broken
+EOF
+if HOME="$INVALID_HOME" AGENTS_SOURCE_DIR="$INVALID_SOURCE" \
+  "$INVALID_SOURCE/install.sh" --skills broken --no-config >/dev/null 2> "$TEST_ROOT/empty-skill-description.txt"; then
+  fail "installation should reject an empty commented description"
+fi
+assert_contains "$TEST_ROOT/empty-skill-description.txt" "description must be a valid non-empty string"
+cat > "$INVALID_SOURCE/skills/test/broken/SKILL.md" <<'EOF'
+---
+name: wrong-name
+description: This metadata should also be rejected.
+---
+
+# Broken
+EOF
+if HOME="$INVALID_HOME" AGENTS_SOURCE_DIR="$INVALID_SOURCE" \
+  "$INVALID_SOURCE/install.sh" --skills broken --no-config >/dev/null 2> "$TEST_ROOT/invalid-skill-name.txt"; then
+  fail "installation should reject a skill name that differs from its directory"
+fi
+assert_contains "$TEST_ROOT/invalid-skill-name.txt" "name must match its directory: broken"
+cat > "$INVALID_SOURCE/skills/test/broken/SKILL.md" <<'EOF'
+---
+name: broken
+description: "A valid quoted description." # an allowed YAML comment
+---
+
+# Valid
+EOF
+COMMENTED_HOME="$TEST_ROOT/commented-home"
+HOME="$COMMENTED_HOME" AGENTS_SOURCE_DIR="$INVALID_SOURCE" \
+  "$INVALID_SOURCE/install.sh" --skills broken --no-config >/dev/null
+assert_link "$COMMENTED_HOME/.agents/skills/broken"
+cat > "$INVALID_SOURCE/skills/test/broken/SKILL.md" <<'EOF'
+---
+name: broken
+description: '''Twas useful' # a valid escaped leading apostrophe
+---
+
+# Valid
+EOF
+SINGLE_QUOTED_HOME="$TEST_ROOT/single-quoted-home"
+HOME="$SINGLE_QUOTED_HOME" AGENTS_SOURCE_DIR="$INVALID_SOURCE" \
+  "$INVALID_SOURCE/install.sh" --skills broken --no-config >/dev/null
+assert_link "$SINGLE_QUOTED_HOME/.agents/skills/broken"
+
+REQUIRED_NICE_HOME="$TEST_ROOT/required-nice-home"
+HOME="$REQUIRED_NICE_HOME" "$ROOT/install.sh" --skills commit >/dev/null
+assert_link "$REQUIRED_NICE_HOME/.agents/skills/nice"
+assert_link "$REQUIRED_NICE_HOME/.claude/skills/nice"
+assert_link "$REQUIRED_NICE_HOME/.codex/skills/nice"
+assert_contains "$REQUIRED_NICE_HOME/.config/agents/selected-skills" "jonasw/nice"
 
 DEDUP_HOME="$TEST_ROOT/dedup-home"
 HOME="$DEDUP_HOME" "$ROOT/install.sh" --all --force >/dev/null
@@ -201,17 +301,26 @@ assert_link "$CANONICAL_HOME/.codex/AGENTS.md"
 HOME="$CANONICAL_HOME" "$CANONICAL_HOME/.local/bin/agents" doctor > "$TEST_ROOT/canonical-doctor.txt"
 assert_contains "$TEST_ROOT/canonical-doctor.txt" "holds separate instructions, so the template check does not apply"
 
-# A selection saved before skills were grouped in folders keeps working, and a link
-# left pointing at the old flat path is repaired without asking for approval.
+# A saved name from before the nice skill was renamed migrates, and all managed
+# links under the old name are removed without changing other selections.
 MIGRATE_HOME="$TEST_ROOT/migrate-home"
-HOME="$MIGRATE_HOME" "$ROOT/install.sh" --skills nice-to-read --no-config >/dev/null
+HOME="$MIGRATE_HOME" "$ROOT/install.sh" --skills nice --no-config >/dev/null
 MIGRATE_ROOT="$(cd "$MIGRATE_HOME/.local/share/agents/source" && pwd)"
 printf 'nice-to-read\n' > "$MIGRATE_HOME/.config/agents/selected-skills"
-rm "$MIGRATE_HOME/.agents/skills/nice-to-read"
-ln -s "$MIGRATE_ROOT/skills/nice-to-read" "$MIGRATE_HOME/.agents/skills/nice-to-read"
+rm "$MIGRATE_HOME/.agents/skills/nice"
+rm "$MIGRATE_HOME/.claude/skills/nice"
+rm "$MIGRATE_HOME/.codex/skills/nice"
+ln -s "$MIGRATE_ROOT/skills/jonasw/nice-to-read" "$MIGRATE_HOME/.agents/skills/nice-to-read"
+ln -s "$MIGRATE_HOME/.agents/skills/nice-to-read" "$MIGRATE_HOME/.claude/skills/nice-to-read"
+ln -s "$MIGRATE_HOME/.agents/skills/nice-to-read" "$MIGRATE_HOME/.codex/skills/nice-to-read"
 HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update > "$TEST_ROOT/update.txt"
-[[ "$(readlink "$MIGRATE_HOME/.agents/skills/nice-to-read")" == "$MIGRATE_ROOT/skills/jonasw/nice-to-read" ]] || fail "a link left by the flat layout should be repointed at the folder"
-assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice-to-read"
+assert_missing "$MIGRATE_HOME/.agents/skills/nice-to-read"
+assert_missing "$MIGRATE_HOME/.claude/skills/nice-to-read"
+assert_missing "$MIGRATE_HOME/.codex/skills/nice-to-read"
+assert_link "$MIGRATE_HOME/.agents/skills/nice"
+assert_link "$MIGRATE_HOME/.claude/skills/nice"
+assert_link "$MIGRATE_HOME/.codex/skills/nice"
+assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice"
 
 # An update says how many skills it left out, so a new folder does not arrive silently.
 assert_contains "$TEST_ROOT/update.txt" "more skills are available. Run 'agents skills' to choose them."
