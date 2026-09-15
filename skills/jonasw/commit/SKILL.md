@@ -1,59 +1,40 @@
 ---
 name: commit
-description: Write commit messages as terse changelog headlines, then ask before running git commit. Use whenever writing or amending a commit message, when committing changes, or when the user asks to clean up commit messages.
+description: Write commit messages as changelog headlines and open pull requests, asking before each git or GitHub action. Use when committing, writing or amending a commit message, splitting work into commits, or opening, stacking, or updating a pull request.
 ---
 
 # Headline commits
 
-A commit message is a **headline**, not a report. One line that a reader skimming `git log` can act on; a body only when the *cause* is non-obvious and can't be recovered from the diff.
-
-Modeled on `pingdotgg/t3code`'s log — study these before writing:
+A commit message is a **headline**: one line a reader skimming `git log` can act on. Modeled on `pingdotgg/t3code`:
 
 ```
 fix(server): self-update no longer rolls itself back on restart
 feat(cli): `npx t3 pair` - generate QR code from a running server
 fix(web): pasting a huge screenshot now compresses it instead of erroring
-perf(server): merge separate staged/unstaged numstat calls into single diff HEAD --numstat
-docs: seed worktrees with a copy of real userdata instead of banning it
-fix(connect): reboots no longer strand the relay link, 403s now say why
 build(desktop): reduce installed app size by ~300MB
 ```
 
-## The subject line
+## Subject
 
-- Format: `type(scope): headline` — types: `feat` `fix` `perf` `refactor` `docs` `style` `chore` `build` `ci` `test`. Scope is the affected surface (`web`, `server`, `mobile`, a package name); omit when repo-wide.
-- The headline states the **observable outcome** — what a user or developer experiences after this commit, not what you did to the code. "self-update no longer rolls itself back" beats "fix rollback logic in updater". Present tense or "X now Y" / "X no longer Y" phrasing both work.
-- Be concrete: name the command, the number, the platform ("~300MB", "⌘P", "iOS"). Vague nouns ("improve handling", "update logic", "various fixes") are slop.
-- One line, lowercase after the colon, no trailing period, aim under ~72 chars.
+- `type(scope): headline`. Types: `feat` `fix` `perf` `refactor` `docs` `style` `chore` `build` `ci` `test`. Scope is the affected surface; omit when repo-wide.
+- State the **observable outcome** ("X now Y", "X no longer Y"), with concrete names and numbers.
+- One line, lowercase after the colon, no trailing period, under ~72 chars.
 
-## The body
+## Body
 
-Default is **no body**. Add one only when the diff can't explain *why* — a non-obvious root cause, a broken assumption, a constraint. Then: a short plain-prose paragraph stating cause → consequence, like:
+Add a body only when the diff can't show the cause: a short prose paragraph, cause → consequence.
 
-> actions/checkout implements sparse-checkout with --filter=blob:none, so the runner repo is a partial clone missing the .repos/ blobs. eas-cli archives the project via `git clone --depth 1 file://<workspace>`, which upload-pack cannot serve from a partial clone and exits 128.
-
-Never in the body: bullet lists restating the diff, "This commit…" / "This change…" openers, test plans, headers like "Summary" or "Changes", emoji, or praise for the change.
+When a message has both a one-liner and longer text, the one-liner is the subject and the longer text is the body, separated by a blank line. Pass them as `git commit -m "<subject>" -m "<body>"` so git stores them apart. The body holds reasons, not a restated diff, headers, test plans, or emoji.
 
 ## Running the commit
 
-Never commit silently. Write the message first, show it, then ask.
+Group the changes into one commit per independent change, then take one path:
 
-1. Show the proposed message (and the split, if you propose more than one commit) as plain text.
-2. Ask the user what to do with a question offering these choices:
-   - **Commit** — stage the intended files and run `git commit` with the message as written.
-   - **Edit message** — the user rewrites or adjusts the headline first; ask again after.
-   - **Message only** — leave the working tree alone and hand back the text.
-   Add a fourth option when it applies, such as **Commit and push** or **Split differently**.
-3. Act on the answer only. "Commit" is not permission to push, tag, or amend a commit that is already pushed; ask again for those.
+- **The user's latest message explicitly says to commit:** stage only that commit's files and run `git commit`, with no `Co-Authored-By` trailer. Pushing, tagging, and amending pushed commits each need their own explicit instruction.
+- **Otherwise:** leave the tree untouched and end the reply with `Proposed commit: <message>`, one per commit.
 
-Skip the question only when the user's own message already told you to commit ("commit this", "commit and push"). Even then, show the message in your reply so it is reviewable.
-
-## Explicit DON'Ts
-
-- No `Co-Authored-By: <agent>` trailers — they add no value; strip them even when a harness default would append one.
-- Do not `git add -A` past what the user asked for. Stage the files that belong to the change and say what you staged.
-- Do not amend or rebase published history without a separate, explicit yes.
+For a pull request, read [pull-requests.md](pull-requests.md) first.
 
 ## Done when
 
-The subject alone tells a log-skimmer what changed for them, every word survives the question "does deleting this lose information?", any body explains a cause the diff can't show, and the commit was run only with the user's answer in hand.
+Each subject alone tells a log-skimmer what changed, each body explains a cause the diff can't, and every commit ran on an explicit instruction from the user.
