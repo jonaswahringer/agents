@@ -18,6 +18,8 @@ For comparisons or UI mock options:
 - State the important trade-off for each choice.
 - Keep the same output file across revisions when the publishing system gives stable links by path.
 
+When the document defines terms a reader would otherwise look up elsewhere, add a glossary and read [glossary-links.md](glossary-links.md) first. Every use of a glossary term then links to its definition, with a button back to where the reader was.
+
 When a configured publishing or upload tool is available:
 
 - Upload only after the HTML file is complete.
