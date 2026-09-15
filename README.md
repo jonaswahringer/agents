@@ -101,6 +101,24 @@ agents skills
 agents doctor
 ```
 
+## See where files come from
+
+```sh
+agents source
+agents skills source
+agents doctor --verbose
+```
+
+`agents source` shows the folder `agents` runs from, whether `agents update`
+replaces it or it is a Git checkout you pull yourself, and how `~/.claude/CLAUDE.md`
+and `~/.codex/AGENTS.md` link to the shared `~/.agents/AGENTS.md`.
+
+`agents skills source` lists each skills folder with how many of its skills are
+selected, then shows the source folder behind every selected skill. A link that is
+missing or points somewhere else gets its own `!` line.
+
+`agents doctor --verbose` runs the usual checks, then prints both reports.
+
 `agents update` downloads the newest repository version and restores the saved
 skill selection. It does not ask for the global configuration again or regenerate
 the file. It can replace known legacy lines in an installer-managed global file
