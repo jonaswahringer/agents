@@ -36,6 +36,42 @@ RESPONSE = {
 OAUTH = {"accessToken": "test-token", "rateLimitTier": "default_claude_max_5x"}
 
 
+class ClaudeLongLivedTokenTests(unittest.TestCase):
+    def setUp(self):
+        self.home = tempfile.TemporaryDirectory()
+        self.addCleanup(self.home.cleanup)
+        os.makedirs(os.path.join(self.home.name, ".claude"))
+        environ = mock.patch.dict(os.environ, {"HOME": self.home.name}, clear=False)
+        environ.start()
+        self.addCleanup(environ.stop)
+        os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
+        self.usage = load_usage()
+        keychain = mock.patch.object(self.usage.subprocess, "run",
+                                     return_value=mock.Mock(returncode=44, stdout=""))
+        keychain.start()
+        self.addCleanup(keychain.stop)
+
+    def write(self, name, data):
+        with open(os.path.join(self.home.name, ".claude", name), "w") as f:
+            json.dump(data, f)
+
+    def test_settings_token_beats_expired_login_and_keeps_its_plan(self):
+        self.write("settings.json", {"env": {"CLAUDE_CODE_OAUTH_TOKEN": "long-lived"}})
+        self.write(".credentials.json", {"claudeAiOauth": {"accessToken": "old", "expiresAt": 1, **OAUTH}})
+        oauth = self.usage.claude_oauth()
+        self.assertEqual(oauth["accessToken"], "long-lived")
+        self.assertEqual(self.usage.claude_plan(oauth), "max5")
+
+    def test_environment_token_works_without_any_login(self):
+        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "from-env"
+        self.assertEqual(self.usage.claude_oauth(), {"accessToken": "from-env"})
+
+    def test_expired_login_without_token_still_reports_expiry(self):
+        self.write(".credentials.json", {"claudeAiOauth": {"accessToken": "old", "expiresAt": 1}})
+        with self.assertRaisesRegex(self.usage.Unavailable, "expired"):
+            self.usage.claude_oauth()
+
+
 class ClaudeCacheTests(unittest.TestCase):
     def setUp(self):
         self.cache = tempfile.TemporaryDirectory()
