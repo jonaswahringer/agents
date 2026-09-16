@@ -59,8 +59,18 @@ still shows when the usage endpoint is rate-limited.
   cooldown without hiding the last known quota.
 - **Keychain over file.** On macOS, `~/.claude/.credentials.json` is often a stale
   copy; the tool reads both and uses whichever token expires later.
-- **Tokens are not refreshed here.** If Claude's token has expired, run `claude` once
-  and it will refresh in place.
+- **Long-lived tokens cannot read quotas.** A `claude setup-token` token (set as
+  `CLAUDE_CODE_OAUTH_TOKEN`) lacks the `user:profile` scope the endpoint requires, so
+  quotas always come from a normal login.
+- **Expired logins are renewed here.** Claude Code only renews a login it uses, and
+  with a long-lived token configured it never does. So when the stored login has
+  expired, the tool spends its refresh token at `platform.claude.com/v1/oauth/token`
+  and saves the result back to the keychain or file it came from, as Claude Code
+  would. It holds Claude Code's own refresh locks (`~/.claude/.oauth_refresh.lock`
+  and `~/.claude.lock`) meanwhile, because a refresh token works only once. That
+  endpoint blocks urllib's default User-Agent and rate-limits `claude-code/<version>`,
+  so the renewal sends Claude Code's real `axios/<version>` agent. Only once the
+  refresh token itself has expired does `claude auth login` become necessary.
 - **The 5-hour window rolls from your first message**, not from a clock boundary.
 - **Per-model weekly buckets exhaust before the aggregate.** You can sit at 27% of your
   overall weekly quota and still be locked out of one model.

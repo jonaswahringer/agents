@@ -36,40 +36,100 @@ RESPONSE = {
 OAUTH = {"accessToken": "test-token", "rateLimitTier": "default_claude_max_5x"}
 
 
-class ClaudeLongLivedTokenTests(unittest.TestCase):
+class ClaudeLoginRenewalTests(unittest.TestCase):
     def setUp(self):
         self.home = tempfile.TemporaryDirectory()
         self.addCleanup(self.home.cleanup)
         os.makedirs(os.path.join(self.home.name, ".claude"))
-        environ = mock.patch.dict(os.environ, {"HOME": self.home.name}, clear=False)
+        environ = mock.patch.dict(os.environ, {"HOME": self.home.name, "USER": "tester"}, clear=False)
         environ.start()
         self.addCleanup(environ.stop)
         os.environ.pop("CLAUDE_CODE_OAUTH_TOKEN", None)
         self.usage = load_usage()
-        keychain = mock.patch.object(self.usage.subprocess, "run",
-                                     return_value=mock.Mock(returncode=44, stdout=""))
-        keychain.start()
-        self.addCleanup(keychain.stop)
+        self.keychain = None
+        self.security_calls = []
+        run = mock.patch.object(self.usage.subprocess, "run", side_effect=self.fake_security)
+        run.start()
+        self.addCleanup(run.stop)
+        self.post = mock.patch.object(self.usage, "post_json", return_value={
+            "access_token": "new-access", "refresh_token": "new-refresh", "expires_in": 3600,
+            "scope": "user:profile user:inference",
+        })
+        self.post_json = self.post.start()
+        self.addCleanup(self.post.stop)
+
+    def fake_security(self, command, **kwargs):
+        self.security_calls.append((command, kwargs.get("input")))
+        if command[1] == "find-generic-password":
+            if self.keychain is None:
+                return mock.Mock(returncode=44, stdout="", stderr="")
+            if "-w" not in command:
+                return mock.Mock(returncode=0, stdout='    "acct"<blob>="keychain-owner"\n', stderr="")
+            return mock.Mock(returncode=0, stdout=json.dumps(self.keychain), stderr="")
+        return mock.Mock(returncode=0, stdout="", stderr="")
+
+    def path(self, name):
+        return os.path.join(self.home.name, ".claude", name)
 
     def write(self, name, data):
-        with open(os.path.join(self.home.name, ".claude", name), "w") as f:
+        with open(self.path(name), "w") as f:
             json.dump(data, f)
 
-    def test_settings_token_beats_expired_login_and_keeps_its_plan(self):
-        self.write("settings.json", {"env": {"CLAUDE_CODE_OAUTH_TOKEN": "long-lived"}})
-        self.write(".credentials.json", {"claudeAiOauth": {"accessToken": "old", "expiresAt": 1, **OAUTH}})
+    def expired_login(self):
+        return {"accessToken": "old-access", "refreshToken": "old-refresh", "expiresAt": 1,
+                "scopes": ["user:profile", "user:inference"], **OAUTH}
+
+    def test_valid_login_is_used_without_renewing(self):
+        future = int((dt.datetime.now().timestamp() + 3600) * 1000)
+        self.write(".credentials.json", {"claudeAiOauth": {**OAUTH, "expiresAt": future}})
+        self.assertEqual(self.usage.claude_oauth()["accessToken"], "test-token")
+        self.post_json.assert_not_called()
+
+    def test_expired_file_login_is_renewed_and_saved(self):
+        self.write(".credentials.json", {"claudeAiOauth": self.expired_login()})
         oauth = self.usage.claude_oauth()
-        self.assertEqual(oauth["accessToken"], "long-lived")
+        self.assertEqual(oauth["accessToken"], "new-access")
         self.assertEqual(self.usage.claude_plan(oauth), "max5")
+        body = self.post_json.call_args.args[1]
+        self.assertEqual(body["refresh_token"], "old-refresh")
+        self.assertEqual(body["scope"], "user:profile user:inference")
+        with open(self.path(".credentials.json")) as f:
+            saved = json.load(f)["claudeAiOauth"]
+        self.assertEqual(saved["refreshToken"], "new-refresh")
+        self.assertGreater(saved["expiresAt"], dt.datetime.now().timestamp() * 1000)
+        self.assertFalse(os.path.exists(self.path(".oauth_refresh.lock")))
+        self.assertFalse(os.path.exists(self.home.name + "/.claude.lock"))
 
-    def test_environment_token_works_without_any_login(self):
-        os.environ["CLAUDE_CODE_OAUTH_TOKEN"] = "from-env"
-        self.assertEqual(self.usage.claude_oauth(), {"accessToken": "from-env"})
+    def test_expired_keychain_login_is_saved_back_through_stdin(self):
+        self.keychain = {"claudeAiOauth": self.expired_login(), "designOauth": {"keep": True}}
+        self.usage.claude_oauth()
+        command, stdin = self.security_calls[-1]
+        self.assertEqual(command, ["security", "-i"])
+        self.assertNotIn("new-refresh", stdin)
+        hexed = stdin.split('-X "')[1].split('"')[0]
+        saved = json.loads(bytes.fromhex(hexed))
+        self.assertEqual(saved["claudeAiOauth"]["refreshToken"], "new-refresh")
+        self.assertEqual(saved["designOauth"], {"keep": True})
+        self.assertIn('-a "keychain-owner" -s "Claude Code-credentials"', stdin)
 
-    def test_expired_login_without_token_still_reports_expiry(self):
-        self.write(".credentials.json", {"claudeAiOauth": {"accessToken": "old", "expiresAt": 1}})
-        with self.assertRaisesRegex(self.usage.Unavailable, "expired"):
+    def test_stale_lock_left_by_a_dead_process_is_taken_over(self):
+        self.write(".credentials.json", {"claudeAiOauth": self.expired_login()})
+        lock = self.path(".oauth_refresh.lock")
+        os.mkdir(lock)
+        os.utime(lock, (1, 1))
+        self.assertEqual(self.usage.claude_oauth()["accessToken"], "new-access")
+
+    def test_failed_renewal_explains_what_to_do(self):
+        self.write("settings.json", {"env": {"CLAUDE_CODE_OAUTH_TOKEN": "long-lived"}})
+        self.write(".credentials.json", {"claudeAiOauth": self.expired_login()})
+        self.post_json.side_effect = self.usage.Unavailable("HTTP 400: invalid_grant")
+        with self.assertRaises(self.usage.Unavailable) as caught:
             self.usage.claude_oauth()
+        message = str(caught.exception)
+        self.assertIn("invalid_grant", message)
+        self.assertIn("claude auth login", message)
+        self.assertIn("long-lived tokens cannot read quotas", message)
+        self.assertEqual(caught.exception.plan, "max5")
 
 
 class ClaudeCacheTests(unittest.TestCase):

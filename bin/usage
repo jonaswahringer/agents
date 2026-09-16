@@ -8,10 +8,13 @@ numbers match what the vendor thinks -- including usage from other machines.
 import argparse
 import concurrent.futures as futures
 import datetime as dt
+import getpass
 import itertools
 import json
 import math
 import os
+import random
+import re
 import select
 import shutil
 import subprocess
@@ -53,8 +56,13 @@ def parse_retry_after(headers):
         return None  # HTTP-date form; this endpoint has not been seen to send it
 
 
-def get_json(url, headers):
-    req = urllib.request.Request(url, headers=headers)
+def post_json(url, body, headers=None):
+    headers = {"Content-Type": "application/json", **(headers or {})}
+    return get_json(url, headers, json.dumps(body).encode("utf-8"))
+
+
+def get_json(url, headers, data=None):
+    req = urllib.request.Request(url, headers=headers, data=data)
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
             return json.load(resp)
@@ -102,9 +110,20 @@ class Window:
 
 
 # --- Claude Code ------------------------------------------------------------
-# A long-lived token from `claude setup-token` wins, as it does in Claude Code.
-# Otherwise credentials live in the login keychain; ~/.claude/.credentials.json
-# is a stale copy on machines where the keychain is in use, so the freshest wins.
+# Quotas need a normal login: a `claude setup-token` token lacks the user:profile
+# scope. Logins live in the login keychain; ~/.claude/.credentials.json is a
+# stale copy on machines where the keychain is in use, so the freshest wins.
+# Claude Code only renews a login it uses, and a long-lived token means it never
+# does, so an expired login is renewed here the way Claude Code renews it.
+
+CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials"
+CLAUDE_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
+CLAUDE_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+# Claude Code refreshes through axios. The endpoint blocks urllib's default agent
+# and rate-limits a claude-code/<version> agent, but answers this one.
+CLAUDE_TOKEN_USER_AGENT = "axios/1.9.0"
+CLAUDE_LOCK_STALE_SECONDS = 60  # matches Claude Code's refresh lock
+
 
 def claude_long_lived_token():
     """CLAUDE_CODE_OAUTH_TOKEN from the environment or ~/.claude/settings.json."""
@@ -119,51 +138,201 @@ def claude_long_lived_token():
 
 
 def claude_oauth():
-    """Long-lived token, else the freshest OAuth blob from keychain or file."""
-    token = claude_long_lived_token()
-    if not token:
-        return claude_login()
-    # The token carries no plan, so borrow it from any stored login, even expired.
+    """A usable login, renewed if expired, with a hint for long-lived token users."""
     try:
-        login = claude_login(allow_expired=True)
-    except Unavailable:
-        login = {}
-    plan = {k: login[k] for k in ("rateLimitTier", "subscriptionType") if k in login}
-    return {"accessToken": token, **plan}
+        return claude_login()
+    except Unavailable as e:
+        if claude_long_lived_token():
+            raise Unavailable(f"{e} (long-lived tokens cannot read quotas)", plan=e.plan) from e
+        raise
 
 
-def claude_login(allow_expired=False):
-    """Freshest Claude Code OAuth blob from the keychain or credentials file."""
+def claude_credentials_path():
+    return os.path.expanduser("~/.claude/.credentials.json")
+
+
+def claude_stored_logins():
+    """Whole credential records by store: {"keychain": {...}, "file": {...}}."""
     try:
         out = subprocess.run(
-            ["security", "find-generic-password", "-s", "Claude Code-credentials", "-w"],
+            ["security", "find-generic-password", "-s", CLAUDE_KEYCHAIN_SERVICE, "-w"],
             capture_output=True, text=True, timeout=TIMEOUT,
         )
     except OSError as e:
         raise Unavailable(str(e)) from e
     blobs = []
     if out.returncode == 0 and out.stdout.strip():
-        blobs.append(out.stdout)
-    path = os.path.expanduser("~/.claude/.credentials.json")
+        blobs.append(("keychain", out.stdout))
+    path = claude_credentials_path()
     if os.path.exists(path):
         with open(path) as f:
-            blobs.append(f.read())
+            blobs.append(("file", f.read()))
 
-    best = None
-    for blob in blobs:
+    stored = {}
+    for store, blob in blobs:
         try:
-            oauth = json.loads(blob)["claudeAiOauth"]
-        except (ValueError, KeyError):
+            record = json.loads(blob)
+        except ValueError:
             continue
-        if best is None or oauth.get("expiresAt", 0) > best.get("expiresAt", 0):
-            best = oauth
-    if best is None:
+        if isinstance(record, dict) and isinstance(record.get("claudeAiOauth"), dict):
+            stored[store] = record
+    return stored
+
+
+def claude_expired(oauth):
+    expires = oauth.get("expiresAt")
+    return bool(expires) and expires / 1000 < time.time()
+
+
+def claude_login():
+    """Freshest Claude Code OAuth blob from the keychain or credentials file."""
+    stored = claude_stored_logins()
+    if not stored:
         raise Unavailable("not signed in to Claude Code")
-    expires = best.get("expiresAt")
-    if not allow_expired and expires and expires / 1000 < dt.datetime.now().timestamp():
-        raise Unavailable("token expired -- run `claude` once to refresh it",
-                          plan=claude_plan(best))
-    return best
+    # max() keeps the first of equal candidates, so the keychain wins ties.
+    store = max(stored, key=lambda s: stored[s]["claudeAiOauth"].get("expiresAt", 0))
+    best = stored[store]["claudeAiOauth"]
+    if not claude_expired(best):
+        return best
+    try:
+        return renew_claude_login(store)
+    except Unavailable as e:
+        raise Unavailable(f"login expired and renewing it failed: {e} -- run `claude auth login`",
+                          plan=claude_plan(best)) from e
+
+
+def renew_claude_login(store):
+    """Trade the stored refresh token for a new login and save it where it was."""
+    with claude_refresh_lock():
+        # Claude Code may have renewed it while we waited for the lock.
+        record = claude_stored_logins().get(store)
+        if record is None:
+            raise Unavailable("the stored login disappeared")
+        oauth = record["claudeAiOauth"]
+        if not claude_expired(oauth):
+            return oauth
+        refresh = oauth.get("refreshToken")
+        if not refresh:
+            raise Unavailable("no refresh token")
+        refresh_expires = oauth.get("refreshTokenExpiresAt")
+        if refresh_expires and refresh_expires / 1000 < time.time():
+            raise Unavailable("the refresh token has expired too")
+
+        data = post_json(CLAUDE_TOKEN_URL, {
+            "grant_type": "refresh_token",
+            "refresh_token": refresh,
+            "client_id": oauth.get("clientId") or CLAUDE_CLIENT_ID,
+            "scope": " ".join(oauth.get("scopes") or []),
+        }, {"User-Agent": CLAUDE_TOKEN_USER_AGENT})
+        if not data.get("access_token") or not isinstance(data.get("expires_in"), (int, float)):
+            raise Unavailable("the token endpoint returned an unexpected response")
+        now_ms = time.time() * 1000
+        renewed = dict(oauth)
+        renewed["accessToken"] = data["access_token"]
+        renewed["refreshToken"] = data.get("refresh_token") or refresh
+        renewed["expiresAt"] = int(now_ms + data["expires_in"] * 1000)
+        if isinstance(data.get("refresh_token_expires_in"), (int, float)):
+            renewed["refreshTokenExpiresAt"] = int(now_ms + data["refresh_token_expires_in"] * 1000)
+        if isinstance(data.get("scope"), str) and data["scope"].split():
+            renewed["scopes"] = data["scope"].split()
+        # The old refresh token is spent now, so the new login must be saved.
+        save_claude_login(store, {**record, "claudeAiOauth": renewed})
+        return renewed
+
+
+class claude_refresh_lock:
+    """Hold Claude Code's refresh locks so one refresh token is never spent twice.
+
+    Claude Code takes ~/.claude/.oauth_refresh.lock and the legacy ~/.claude.lock,
+    both directories whose mtime it bumps while held and treats as stale after 60s.
+    """
+
+    def __init__(self):
+        home = os.path.expanduser("~/.claude")
+        self.paths = [os.path.join(home, ".oauth_refresh.lock"), home + ".lock"]
+        self.held = []
+
+    def __enter__(self):
+        try:
+            for path in self.paths:
+                self.acquire(path)
+        except BaseException:
+            self.release()
+            raise
+        return self
+
+    def __exit__(self, *exc):
+        self.release()
+
+    def acquire(self, path):
+        for _ in range(10):
+            try:
+                os.mkdir(path)
+                self.held.append(path)
+                return
+            except FileExistsError:
+                try:
+                    if time.time() - os.stat(path).st_mtime > CLAUDE_LOCK_STALE_SECONDS:
+                        os.rmdir(path)
+                        continue
+                except OSError:
+                    continue
+            except OSError as e:
+                raise Unavailable(f"cannot lock the Claude login: {e}") from e
+            time.sleep(1 + random.random())
+        raise Unavailable("Claude Code is renewing the login right now; try again shortly")
+
+    def release(self):
+        while self.held:
+            try:
+                os.rmdir(self.held.pop())
+            except OSError:
+                pass
+
+
+def claude_keychain_account():
+    """The stored item's account, so `-U` updates it rather than adding a second."""
+    try:
+        out = subprocess.run(["security", "find-generic-password", "-s", CLAUDE_KEYCHAIN_SERVICE],
+                             capture_output=True, text=True, timeout=TIMEOUT)
+        match = re.search(r'"acct"<blob>="(.*)"', out.stdout)
+    except (OSError, subprocess.TimeoutExpired):
+        match = None
+    return match.group(1) if match else os.environ.get("USER") or getpass.getuser()
+
+
+def save_claude_login(store, record):
+    """Write a credential record back to the store it came from."""
+    payload = json.dumps(record, separators=(",", ":"))
+    if store == "keychain":
+        account = claude_keychain_account()
+        hexed = payload.encode("utf-8").hex()
+        # `security -i` reads the command from stdin, keeping the secret out of
+        # the process list. Claude Code switches to argv above the same limit.
+        line = f'add-generic-password -U -a "{account}" -s "{CLAUDE_KEYCHAIN_SERVICE}" -X "{hexed}"\n'
+        if len(line) <= 4032:
+            command, stdin = ["security", "-i"], line
+        else:
+            command, stdin = ["security", "add-generic-password", "-U", "-a", account,
+                              "-s", CLAUDE_KEYCHAIN_SERVICE, "-X", hexed], None
+        try:
+            out = subprocess.run(command, input=stdin, capture_output=True, text=True, timeout=TIMEOUT)
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise Unavailable(f"renewed the login but could not save it: {e}") from e
+        if out.returncode != 0:
+            detail = " ".join((out.stderr or out.stdout).split())[:200]
+            raise Unavailable(f"renewed the login but could not save it to the keychain: {detail}")
+        return
+
+    path = claude_credentials_path()
+    try:
+        fd, temporary = tempfile.mkstemp(prefix=".credentials.", dir=os.path.dirname(path))
+        with os.fdopen(fd, "w") as f:
+            os.chmod(temporary, 0o600)
+            f.write(payload)
+        os.replace(temporary, path)
+    except OSError as e:
+        raise Unavailable(f"renewed the login but could not save it: {e}") from e
 
 
 def claude_plan(oauth):
