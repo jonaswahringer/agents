@@ -49,4 +49,16 @@ When a configured publishing or upload tool is available:
 - Report the public URL only after the upload succeeds.
 - Do not open a browser to verify it unless the user asks.
 
+The configured tool is comms, the report publisher in `tools/comms` of the agents repo, driven with the stock `postplan` CLI:
+
+```sh
+npx postplan upload <file> --api-url https://minj.tail794979.ts.net:8774
+```
+
+Run `npx postplan auth set <api-key> --api-url https://minj.tail794979.ts.net:8774` once per machine. The CLI keeps the key and the draft mappings in `~/.postplan`; never write the key into a file in the repo.
+
+Re-uploading the same path bumps the same URL with a new version. Pass `--new` to start a separate draft. Documents over 512 KB are rejected. The URL is reachable over the tailnet only, so say that when you report it.
+
+Setup, keys, and what a document may contain: [tools/comms/README.md](../../../tools/comms/README.md).
+
 Do not use this skill for application HTML, components, emails, or other HTML that belongs in the product codebase.
