@@ -1,2 +1,3 @@
 - top-down: Knowledge Tree-like top down explanations, where the user drives the journey into details
-- 
+- html-communication blocks: every block in a generated report can be hidden by the reader, restored, and the edits handed back to the agent or saved into the file. Notion blocks are the reference; the file must stay small.
+- docchat: talk to the agent about a generated document from inside the document. Needs a reachable agent endpoint, so it builds on the block edits above rather than replacing them.
