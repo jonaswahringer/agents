@@ -6,8 +6,14 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agents-test.XXXXXX")"
 TEST_HOME="$TEST_ROOT/home"
 
+# The canaries below are written into the real working tree, so they have to be
+# removed however the script ends, including when install.sh itself fails.
+CANARY_DIR="$ROOT/tools/comms"
+
 cleanup() {
   rm -rf "$TEST_ROOT"
+  [ -d "$CANARY_DIR" ] && rm -f "$CANARY_DIR"/canary*
+  return 0
 }
 trap cleanup EXIT
 
@@ -50,7 +56,26 @@ export AGENTS_PROFILE_NETWORK="Services on another machine are not reachable thr
 export AGENTS_PROFILE_SYNC="Push changes, then pull them on the machine that runs the service."
 export AGENTS_PROFILE_TOOLING="Use zsh, Git, and the package manager already used by each project."
 
+# A local install copies the working tree. Anything git ignores is local state
+# — node_modules, databases, the comms API key — and must never reach the
+# snapshot, including names git would C-quote.
+CANARY_NAMES=("canary-ignored.log" "canary-dätä.log" "canary spaced.log")
+if [ -d "$CANARY_DIR" ]; then
+  for canary in "${CANARY_NAMES[@]}"; do
+    : > "$CANARY_DIR/$canary"
+  done
+fi
+
 "$ROOT/install.sh" --all --force >/dev/null
+
+if [ -d "$CANARY_DIR" ]; then
+  for canary in "${CANARY_NAMES[@]}"; do
+    if [ -e "$TEST_HOME/.local/share/agents/source/tools/comms/$canary" ]; then
+      fail "the installed snapshot contains an ignored file: $canary"
+    fi
+  done
+  assert_file "$TEST_HOME/.local/share/agents/source/tools/comms/server.js"
+fi
 
 AGENTS="$TEST_HOME/.local/bin/agents"
 assert_link "$AGENTS"

@@ -1,0 +1,19 @@
+{
+  "name": "comms",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Publishes one self-contained HTML report to a stable tailnet URL. A Bun port of Postplan.",
+  "scripts": {
+    "start": "bun run server.js",
+    "dev": "bun --watch server.js",
+    "migrate": "bun run scripts/migrate.js",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "hono": "^4.13.3",
+    "jose": "^6.2.3",
+    "nanoid": "^5.1.5",
+    "parse5": "^7.3.0"
+  }
+}

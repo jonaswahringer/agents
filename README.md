@@ -91,6 +91,17 @@ If another command on the machine already provides the name `usage`, it installs
 `AGENTS_USAGE_NAME` to choose a different one. `agents doctor` reports whichever name
 is in use.
 
+## Tools
+
+`tools/` holds services that live alongside the skills rather than being
+installed by them. [`tools/comms`](tools/comms/README.md) publishes a
+self-contained HTML report to a stable URL on the tailnet, which is where the
+`html-communication` skill sends a write-up you want to read on your phone.
+
+On the machine that runs one of these, launchd points at this checkout rather
+than at the installed copy, so `git clean -xd` here would stop the service. See
+that tool's README.
+
 ## Update or change the setup
 
 ```sh
