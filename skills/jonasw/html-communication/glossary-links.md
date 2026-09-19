@@ -20,7 +20,7 @@ Turns every glossary term in the document into a link to its definition, highlig
 
 Never linked: `a, code, pre, kbd, script, style, textarea, button, h1–h6, th, nav`, and a term inside its own entry.
 
-Theme hooks (CSS variables, all optional): `--accent` (underline), `--bg`, `--fg`, `--line` (button), `--gloss-flash` (highlight color).
+Theme hooks: `--accent` (underline), `--bg`, `--fg`, `--line` (button), and `--gloss-flash` (highlight). They come from [theme.css](theme.css) or the project brand file; each also has a literal fallback in the CSS below, so the script works on its own.
 
 ## HTML
 
