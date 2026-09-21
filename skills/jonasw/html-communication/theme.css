@@ -22,7 +22,13 @@
    --font        body type stack
    --font-mono   code type stack
    --radius      corner radius for surfaces and buttons
-   --gloss-flash glossary highlight (see glossary-links.md)
+   --gloss-hit      fill behind the words a glossary jump lands on
+   --gloss-hit-fg   text on that fill
+   --gloss-hit-ring hairline around it, and the halo it collapses from
+   --gloss-hit-soft tint for an entry whose term isn't written out
+   --gloss-hit-bar  bar down the edge of that entry
+   --gloss-hit-focus focus ring while the marked element holds focus
+   (see glossary-links.md)
 */
 
 :root {
@@ -46,7 +52,12 @@
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
   --radius: 10px;
 
-  --gloss-flash: rgba(255, 196, 0, 0.3);
+  --gloss-hit: #fde9ab;
+  --gloss-hit-fg: #241a00;
+  --gloss-hit-ring: rgba(191, 140, 20, 0.35);
+  --gloss-hit-soft: rgba(253, 233, 171, 0.45);
+  --gloss-hit-bar: #e0ad35;
+  --gloss-hit-focus: #a87500;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -65,6 +76,11 @@
 
     --code-bg: #161616;
 
-    --gloss-flash: rgba(255, 196, 0, 0.24);
+    --gloss-hit: #e7c977;
+    --gloss-hit-fg: #1a1305;
+    --gloss-hit-ring: rgba(255, 220, 140, 0.25);
+    --gloss-hit-soft: rgba(231, 201, 119, 0.16);
+    --gloss-hit-bar: #c99c34;
+    --gloss-hit-focus: #d8a63f;
   }
 }
