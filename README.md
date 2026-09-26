@@ -179,6 +179,7 @@ folder to the repository is enough to make it appear in the menu.
 - `html-communication` presents an answer as a self-contained HTML page.
 - `nice` makes user-facing answers concise, plain, direct, and honest about evidence.
 - `note` captures a durable note from the current conversation.
+- `pair` pair-programs with you driving and the agent navigating, keeping taste calls with you and asking what you think before it explains.
 - `research-ricky` researches complex and technical concepts.
 - `rnd` explores an idea before committing to a direction.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
