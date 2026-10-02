@@ -15,6 +15,7 @@
     <key>PORT</key><string>3775</string>
     <key>POSTPLAN_PUBLIC_BASE_URL</key><string>https://minj.tail794979.ts.net:8774</string>
     <key>POSTPLAN_DATA_DIR</key><string>/Users/minj/.local/share/comms</string>
+    <key>MAX_MEDIA_BYTES</key><string>268435456</string>
     <key>POSTPLAN_BOOTSTRAP_API_KEY</key><string>replace-me</string>
   </dict>
   <key>RunAtLoad</key><true/>

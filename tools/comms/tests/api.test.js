@@ -1,7 +1,7 @@
 // The whole worker, run in process against a throwaway database and bucket.
-// This is where the two deliberate changes from upstream are pinned down: an
+// This is where the deliberate changes from upstream are pinned down: an
 // API key is required to upload, and a served draft may run its own inline
-// script but nothing else.
+// script and load recordings from this host.
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -144,6 +144,7 @@ test("a served draft carries the CSP this host runs on", async () => {
       "script-src 'unsafe-inline'",
       "style-src 'unsafe-inline'",
       "img-src https: data:",
+      "media-src 'self'",
       "connect-src 'none'",
       "base-uri 'none'",
       "form-action 'none'"

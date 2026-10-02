@@ -4,6 +4,8 @@ import { mkdir } from "node:fs/promises";
 import { createApp } from "./src/api.js";
 import { FileBucket, noAssets, SqliteD1 } from "./src/adapters.js";
 import { deleteExpiredRateLimits } from "./src/rate-limit.js";
+import { MediaFiles } from "./src/media.js";
+import { getConfig } from "./src/config.js";
 
 // launchd writes stdout and stderr straight to the log with nothing added, so
 // anything worth finding later has to date itself.
@@ -40,7 +42,8 @@ const env = {
   ...Bun.env,
   ASSETS: noAssets,
   DB: db,
-  DRAFTS: new FileBucket(`${dataDir}/drafts`)
+  DRAFTS: new FileBucket(`${dataDir}/drafts`),
+  MEDIA: new MediaFiles(`${dataDir}/media`)
 };
 
 const app = createApp();
@@ -58,6 +61,8 @@ try {
   server = Bun.serve({
     port,
     hostname,
+    maxRequestBodySize: Math.max(getConfig(env).maxMediaBytes, getConfig(env).uploadBodyBytes),
+    idleTimeout: 60,
     fetch: (request) => app.fetch(request, env, { waitUntil() {}, passThroughOnException() {} })
   });
 } catch (error) {

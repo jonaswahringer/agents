@@ -17,6 +17,7 @@ import { consumeRateLimit } from "./rate-limit.js";
 import { renderHome, renderNotFound } from "./render.js";
 import { deleteHtmlObject, getHtmlObject, putHtmlObject } from "./storage.js";
 import { registerWebRoutes } from "./web.js";
+import { registerMediaRoutes } from "./media.js";
 
 const encoder = new TextEncoder();
 
@@ -237,6 +238,7 @@ export function createApp() {
   });
 
   registerWebRoutes(app);
+  registerMediaRoutes(app, requireAuth);
 
   app.get("/d/:draftId", serveDraft);
   app.get("/d/:draftId/raw", serveDraft);
@@ -354,6 +356,7 @@ function draftContentSecurityPolicy() {
     "script-src 'unsafe-inline'",
     "style-src 'unsafe-inline'",
     "img-src https: data:",
+    "media-src 'self'",
     "connect-src 'none'",
     "base-uri 'none'",
     "form-action 'none'"

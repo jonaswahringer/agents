@@ -11,6 +11,7 @@ export function getConfig(env = {}) {
     bootstrapApiKey: cleanString(env.POSTPLAN_BOOTSTRAP_API_KEY),
     publicBaseUrl,
     maxHtmlBytes: positiveNumber(env.MAX_HTML_BYTES, DEFAULT_MAX_HTML_BYTES),
+    maxMediaBytes: positiveNumber(env.MAX_MEDIA_BYTES, 256 * 1024 * 1024),
     uploadBodyBytes: parseByteLimit(env.UPLOAD_BODY_LIMIT, DEFAULT_UPLOAD_BODY_BYTES),
     sessionSecret: cleanString(env.POSTPLAN_SESSION_SECRET),
     shooBaseUrl: normalizeBaseUrl(env.SHOO_BASE_URL || "https://shoo.dev"),

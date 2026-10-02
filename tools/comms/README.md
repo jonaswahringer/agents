@@ -13,16 +13,14 @@ filesystem, so nothing touches a cloud account. The stock `postplan` CLI talks
 to it unchanged — point it at this server's URL and it cannot tell the
 difference.
 
-The worker source in `src/` is geekdada's port, unchanged apart from the two
-differences below. `src/adapters.js` supplies the bindings Cloudflare would
-otherwise provide: D1 becomes `bun:sqlite`, R2 becomes a directory, and the
+The worker source in `src/` is based on geekdada's port, with the changes
+below and local recording support. `src/adapters.js` supplies the bindings
+Cloudflare would otherwise provide: D1 becomes `bun:sqlite`, R2 becomes a directory, and the
 assets binding becomes a 404. There is no build step; Bun runs the ESM source
 directly.
 
-The environment variables keep their `POSTPLAN_` names. They are read by
-upstream code in `src/config.js`, and renaming them would mean editing files
-this port deliberately leaves alone. It was called `postplan-local` before it
-moved into this repo.
+The environment variables keep their `POSTPLAN_` names for compatibility with
+the HTML upload tool. It was called `postplan-local` before it moved into this repo.
 
 ## Differences from upstream
 
@@ -31,6 +29,8 @@ moved into this repo.
 - **Inline scripts run.** The served Content-Security-Policy is
   `script-src 'unsafe-inline'` instead of `'none'`, so a report's own behaviour
   works: glossary links, collapsible sections, reader-hidden blocks.
+- **Local recordings play.** `media-src 'self'` lets a document play recordings
+  served by this host. It does not allow video from other hosts or ports.
 
 So a document is checked twice. `src/html-policy.js` rejects, at upload time:
 external scripts (`<script src>` and the SVG spelling `<script href>`), forms,
@@ -41,7 +41,7 @@ fragment. The served CSP is then:
 
 ```
 default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';
-img-src https: data:; connect-src 'none'; base-uri 'none'; form-action 'none'
+img-src https: data:; media-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'
 ```
 
 ### What that does not stop
@@ -83,6 +83,7 @@ migrations have run, rather than failing on the first request.
 | `POSTPLAN_DATA_DIR` | `./data` | Database and published documents. |
 | `POSTPLAN_PUBLIC_BASE_URL` | request origin | The origin used in returned links. |
 | `MAX_HTML_BYTES` | `524288` | Size cap per document (512 KB). |
+| `MAX_MEDIA_BYTES` | `268435456` | Size cap per recording (256 MB). Uploads stream to disk; Bun's body ceiling allows this or the JSON body limit, whichever is larger. |
 | `UPLOAD_BODY_LIMIT` | `2mb` | Size cap on the whole JSON request. |
 | `UPLOAD_IP_RATE_LIMIT_MAX` | `60` per minute | Uploads per client IP, counted before authentication. Over the tailnet the IP is the peer address from `X-Forwarded-For`, which Tailscale Serve sets and does not let a client override. When that header is present nothing else is consulted, so `CF-Connecting-IP` and `X-Real-IP` cannot be used to forge it. |
 | `UPLOAD_RATE_LIMIT_MAX` | `30` per minute | Uploads per API key. |
@@ -129,6 +130,52 @@ unpublishes a draft; `POST /api/drafts/<id>/disable` takes it down with a reason
 One self-contained HTML file. Images must be `data:` URIs or `https:` URLs;
 there is no companion-file upload, so `<img src="chart.png">` will 404. Inline
 `<style>` and `<script>` are fine. 512 KB is the ceiling.
+
+## Publish a recording
+
+MP4, M4V, WebM and MOV files can be stored separately from HTML. Playback depends
+on the browser's support for the file's codecs; H.264 MP4 is a good choice for
+screen recordings. This service does not transcode video.
+
+From `tools/comms`, using the same saved credentials as the Postplan HTML CLI:
+
+```sh
+bun run publish-media /path/to/recording.mp4
+```
+
+The command also accepts `POSTPLAN_API_URL` and `POSTPLAN_API_KEY`. It prints:
+
+- `publicUrl`: an HTML page with a video player and download link.
+- `mediaUrl`: the video itself, usable as the `src` of a `<video>` in a report.
+- `downloadUrl`: the video with an attachment header for downloading.
+- `mediaId`: the generated filename, for deletion through the API.
+
+Each upload creates a new recording and link. There is no recording version
+history or dashboard listing. To put it in a report, use the media URL returned
+by the upload, or its path when the report is hosted on the same service:
+
+```html
+<video controls playsinline src="/media/<mediaId>"></video>
+<a href="/media/<mediaId>?download=1" download>Download recording</a>
+```
+
+The API accepts a raw binary body at `POST /api/media?filename=recording.mp4`,
+with the same bearer API key as HTML uploads. Authenticated uploads are rate
+limited, and the 256 MB default is checked both against `Content-Length` and
+while receiving the stream. Files only become available after upload completes.
+The server allows 60 seconds of inactivity during a transfer.
+The original filename is kept for the player and download; the disk filename
+is generated, so requests cannot address arbitrary host files.
+
+`GET /m/<mediaId>` serves the player; `GET /media/<mediaId>` serves the video.
+Byte ranges support seeking, and `HEAD` reports size without sending the file.
+Reading is allowed to anyone with the link who can reach this service through
+Tailscale, like HTML drafts. `DELETE /api/media/<mediaId>` requires a key from
+the uploading account and removes both the recording and its metadata.
+
+No client configuration is needed. The server sends `media-src 'self'` in the
+HTML policy, and the browser enforces it. Tailscale must separately allow access
+to port 8774.
 
 ## Reach
 
@@ -216,6 +263,8 @@ postplan.sqlite                                        metadata, no document bod
 drafts/drafts/<draft-id>/versions/<id>.html            one file per version
 drafts/.r2-meta/drafts/<draft-id>/versions/<id>.html.json   the content type R2 would have stored
 comms.log                                              service output
+media/<mediaId>                                        recording bytes
+media/<mediaId>.json                                   filename, type, size and owning account
 ```
 
 The doubled `drafts/` is not a typo: `drafts` is the bucket directory, and the
@@ -230,6 +279,7 @@ directory, or back it up live with SQLite's own backup:
 ```sh
 sqlite3 ~/.local/share/comms/postplan.sqlite ".backup /path/to/comms-backup.sqlite"
 cp -R ~/.local/share/comms/drafts /path/to/drafts-backup
+cp -R ~/.local/share/comms/media /path/to/media-backup
 ```
 
 The API key lives in `.env` and inside the installed plist, both `chmod 600` and

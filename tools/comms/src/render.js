@@ -26,6 +26,18 @@ export function renderNotFound() {
   });
 }
 
+export function renderMediaPage({ filename, mediaPath, downloadPath }) {
+  return htmlPage({
+    title: filename,
+    body: `<main class="home">
+      <h1>${escapeHtml(filename)}</h1>
+      <video controls playsinline preload="metadata" style="width:100%;max-height:70vh" src="${escapeHtml(mediaPath)}"></video>
+      <p><a href="${escapeHtml(downloadPath)}" download>Download recording</a></p>
+      <p>If this browser cannot play the recording, download it to open in a video player.</p>
+    </main>`
+  });
+}
+
 function htmlPage({ title, body }) {
   return `<!doctype html>
 <html lang="en">
