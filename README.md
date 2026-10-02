@@ -175,6 +175,7 @@ folder to the repository is enough to make it appear in the menu.
 ### `jonasw`
 
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
+- `executive-summary` writes an executive summary with the bottom line first, for a decision-maker who reads only the top.
 - `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
 - `html-communication` presents an answer as a self-contained HTML page.
 - `nice` makes user-facing answers concise, plain, direct, and honest about evidence.
