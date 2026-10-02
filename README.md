@@ -98,9 +98,19 @@ installed by them. [`tools/comms`](tools/comms/README.md) publishes a
 self-contained HTML report to a stable URL on the tailnet, which is where the
 `html-communication` skill sends a write-up you want to read on your phone.
 
-On the machine that runs one of these, launchd points at this checkout rather
-than at the installed copy, so `git clean -xd` here would stop the service. See
-that tool's README.
+[`tools/workflows`](tools/workflows/README.md) runs recurring jobs from system
+cron, starting with a brief, personalized T3 Code nightly update digest.
+[`tools/auto-resume`](tools/auto-resume/README.md) queues explicitly armed agent
+continuations and checks the `usage` command before retrying after a quota reset.
+Both keep their private settings and job state outside this repository.
+
+See the [compact implementation plan](docs/workflows-auto-resume-plan.md) for
+the service boundaries and verification scope. Their READMEs describe setup and
+cron entries; installing the repository does not activate these tools.
+
+The comms launchd service and the example cron entries point at this checkout
+rather than at the installed copy. `git clean -xd` here would remove comms
+dependencies and stop that service. See each tool's README for activation.
 
 ## Update or change the setup
 
