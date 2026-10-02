@@ -1,0 +1,19 @@
+node_modules/
+
+# Published documents and the SQLite database live outside every repo, in
+# ~/.local/share/comms, so they survive an `agents update`. This entry only
+# catches a local run that used the default data directory.
+data/
+*.sqlite
+*.sqlite-*
+*.log
+
+# The bootstrap API key lives in both of these. The committed *.example files
+# carry "replace-me" instead.
+.env
+com.wahringer.comms.plist
+
+# The postplan CLI's config and draft mapping, if anyone points $HOME here.
+.postplan/
+
+.DS_Store

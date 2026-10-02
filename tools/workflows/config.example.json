@@ -1,0 +1,12 @@
+{
+  "repo": "pingdotgg/t3code",
+  "base_branch": "main",
+  "gh_command": ["/opt/homebrew/bin/gh"],
+  "installed_version_command": ["/Users/minj/.local/bin/t3", "--version"],
+  "codex_command": ["/Users/minj/.local/bin/codex", "--model", "gpt-6.1-sol", "-c", "model_reasoning_effort=\"medium\""],
+  "nightly_pattern": "nightly",
+  "bootstrap_days": 7,
+  "command_timeout_seconds": 60,
+  "agent_timeout_seconds": 300,
+  "profile": "T3 Code runs on my always-on Mac mini. I connect from my MacBook and iPhone over Tailscale. I use Codex and Claude. Prioritize remote access, reconnect behavior, reliability, session continuation, and provider usage limits."
+}

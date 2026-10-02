@@ -35,7 +35,43 @@ if [[ -n "$SOURCE_DIR" ]]; then
     echo "agents: $SOURCE_DIR is not an agents repository" >&2
     exit 1
   fi
-  tar -C "$SOURCE_DIR" --exclude=.git -cf - . | tar -C "$STAGE_DIR/source" -xf -
+  # Copy the working tree, but never the files git ignores. Those are local
+  # state, not the tool: node_modules, databases, logs, and the API key that
+  # tools/comms keeps in .env and its private launchd plist. Installing from a
+  # GitHub tarball never saw them; installing from a local checkout used to.
+  EXCLUDES="$STAGE_DIR/excludes"
+
+  # These never belong in a snapshot, whatever the source tree is. They are the
+  # floor, so a source directory that is not a git checkout is still covered.
+  # tar matches a pattern without a slash against any path component, so each of
+  # these excludes that name at any depth, which is what we want here.
+  cat > "$EXCLUDES" <<'FLOOR'
+node_modules
+.env
+__pycache__
+.DS_Store
+FLOOR
+
+  if git -C "$SOURCE_DIR" rev-parse --git-dir >/dev/null 2>&1; then
+    # core.quotepath=off keeps non-ASCII names literal; git would otherwise
+    # C-quote them ("d\303\244t\303\244.log") and the pattern would never match.
+    git -C "$SOURCE_DIR" -c core.quotepath=off ls-files --others --ignored \
+      --exclude-standard --directory \
+      | sed -e 's|/*$||' -e 's|^|./|' >> "$EXCLUDES"
+  else
+    # No .gitignore to read, so name the remaining local state explicitly. Full
+    # paths only: a bare "data" or "*.log" would match at any depth and take
+    # someone's docs/data or a tracked log with it.
+    echo "agents: $SOURCE_DIR is not a git checkout; local state is excluded by name only" >&2
+    cat >> "$EXCLUDES" <<'FALLBACK'
+./tools/comms/data
+./tools/comms/com.wahringer.comms.plist
+./tools/comms/*.log
+FALLBACK
+  fi
+
+  tar -C "$SOURCE_DIR" --exclude=.git --exclude-from="$EXCLUDES" -cf - . \
+    | tar -C "$STAGE_DIR/source" -xf -
 else
   ARCHIVE="$STAGE_DIR/agents.tar.gz"
   CACHE_KEY="${STAGE_DIR##*.}"
