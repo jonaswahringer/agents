@@ -135,8 +135,17 @@ there is no companion-file upload, so `<img src="chart.png">` will 404. Inline
 | Layer | Address | Who can get there |
 |---|---|---|
 | Bun process | `127.0.0.1:3775` | this machine only |
-| Tailscale Serve | `https://minj.tail794979.ts.net:8774` | anything signed into the tailnet |
+| Tailscale Serve | `https://minj.tail794979.ts.net:8774` | `group:principals` through the TCP 8774 grant to `tag:server` |
 | Tailscale Funnel | off | deliberately; it would make the same hostname public |
+
+The live Loki policy and its repo reference were aligned on 2026-10-03 to allow
+TCP 8774 for `group:principals`, which currently contains
+`jonaswahringer@github`. Membership in the tailnet alone does not grant access.
+The backend on 3775 remains loopback-only and denied by the tailnet policy.
+Minj's effective rules confirm access from Jonas's MacBook and iPhone addresses;
+local health probes return 200. A Comms request from those devices remains
+unverified. See `/Users/minj/Projects/loki/guides/tailscale-network.md` for the
+network workflow and `tailscale-acl.json` in that repo for the policy reference.
 
 ```sh
 tailscale serve status
