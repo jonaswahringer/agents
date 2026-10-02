@@ -61,6 +61,7 @@ assert_file "$TEST_HOME/.claude/CLAUDE.md.backup-"* 2>/dev/null || fail "expecte
 assert_file "$TEST_HOME/.codex/AGENTS.md.backup-"* 2>/dev/null || fail "expected the old Codex config to be backed up"
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "I build developer tools."
 assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `nice` skill to every user-facing response.'
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat.'
 assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `unslop` skill to every response'
 
 # Doctor checks the generated config still carries the template instructions and
@@ -112,6 +113,8 @@ assert_contains "$MENU" "      [x] jonasw"
 assert_contains "$MENU" "          [x] nice"
 
 awk '
+  $0 == "## User input" { next }
+  $0 == "When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat." { next }
   $0 == "Apply the `nice` skill to every user-facing response." {
     print "Apply the `unslop` skill to every response you write. Before sending any user-facing text, follow its process to strip AI-writing patterns and keep a human voice."
     next
@@ -127,6 +130,7 @@ printf '\nA personal line that updates must preserve.\n' >> "$TEST_HOME/.agents/
 "$AGENTS" update >/dev/null
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "A personal line that updates must preserve."
 assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `nice` skill to every user-facing response.'
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat.'
 assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `unslop` skill to every response'
 
 # Branch archives may be cached even though update says it is downloading. A

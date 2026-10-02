@@ -683,7 +683,16 @@ migrate_managed_global_config() {
       print "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements."
       next
     }
+    $0 == "When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat." { has_user_input_rule = 1 }
     { print }
+    END {
+      if (!has_user_input_rule) {
+        print ""
+        print "## User input"
+        print ""
+        print "When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat."
+      }
+    }
   ' "$source" > "$temporary"
   if cmp -s "$source" "$temporary"; then
     rm "$temporary"

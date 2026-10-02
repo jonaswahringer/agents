@@ -121,8 +121,8 @@ missing or points somewhere else gets its own `!` line.
 
 `agents update` downloads the newest repository version and restores the saved
 skill selection. It does not ask for the global configuration again or regenerate
-the file. It can replace known legacy lines in an installer-managed global file
-while preserving profile answers and personal additions.
+the file. It can replace known legacy lines and add the user-input tool rule in an
+installer-managed global file while preserving profile answers and personal additions.
 
 A selection saved before skills were grouped in folders still works: each saved name is matched to the folder it now lives in, and links left pointing at the old location are repaired. A saved skill that has since been removed is reported and dropped.
 

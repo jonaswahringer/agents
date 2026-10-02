@@ -24,6 +24,10 @@ These instructions apply on every project unless a project gives more specific g
 
 {{TOOLING}}
 
+## User input
+
+When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat.
+
 ## Commits
 
 Show the commit message and ask before running `git commit`. Ask again before pushing, tagging, or amending a commit that already exists on a remote. Write the message as one headline that says what changed for the reader, and do not add `Co-Authored-By` trailers for agents.
