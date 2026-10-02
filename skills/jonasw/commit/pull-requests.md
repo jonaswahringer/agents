@@ -19,8 +19,16 @@ Stack when split PRs depend on each other.
 
 - Title follows the subject rules in [SKILL.md](SKILL.md).
 - Body: why the change exists and how to verify it, in a few lines.
-- Show titles, bodies, and base branches, then ask before pushing or creating PRs.
+- Show titles, bodies, base branches, and review labels, then ask before pushing or creating PRs.
+
+## Review labels
+
+Every PR created must have an appropriate label so review agents can pick it up automatically. Check repository instructions, review automation, and existing labels to choose one that fits the change and that the review agents watch.
+
+If no suitable label exists, create one with a clear name and description that follow the repository's conventions, then add it to the PR. Authorization to create the PR includes creating and adding its review label; no separate approval is needed for those label actions.
+
+Apply the label during creation or immediately afterward, including every PR in a stack. Verify that each PR has the label. A new label alone does not make automation watch it; report any missing automation or inability to create or apply the label.
 
 ## Done when
 
-The reply ends with the URL of every PR created or updated, in stack order (`gh pr view <branch> --json url -q .url`).
+Every PR created has its review label, or the reply reports why labeling could not be completed. The reply ends with the URL of every PR created or updated, in stack order (`gh pr view <branch> --json url -q .url`).
