@@ -331,10 +331,14 @@ def main():
     os.umask(0o077)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=["run", "tick", "collect", "status", "history"])
-    parser.add_argument("workflow", nargs="?", default="t3-updates", choices=["t3-updates"])
+    parser.add_argument("workflow", nargs="?", default="t3-updates", choices=["t3-updates", "furnace"])
     parser.add_argument("--config", type=Path, default=Path.home() / ".config/agents/workflows.json")
     parser.add_argument("--state-dir", type=Path, default=Path.home() / ".local/state/agents/workflows")
+    parser.add_argument("--furnace-state-dir", type=Path, default=Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local/state"))) / "agents/furnace")
     args = parser.parse_args()
+    if args.workflow == "furnace":
+        from furnace_workflow import main as furnace_main
+        return furnace_main(args, command)
     state = private_dir(args.state_dir.expanduser().resolve())
     private_dir(state / "reports")
     lock = (state / "run.lock").open("a")

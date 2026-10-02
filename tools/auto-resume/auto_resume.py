@@ -20,7 +20,9 @@ ROOT = Path(__file__).resolve().parents[2]
 PROVIDERS = {"codex": "Codex", "claude": "Claude Code", "cursor": "Cursor"}
 GUARD = ("Continue only the already authorized task. Preserve all existing approval "
          "requirements, including asking before git commit, push, tagging, or amending "
-         "remote commits. Stop if the task is complete or requires human input. Do not "
+         "remote commits unless the user already explicitly authorized those exact actions "
+         "for this task. Preserve that authorization without broadening it. "
+         "Stop if the task is complete or requires human input. Do not "
          "switch provider/model, use paid API fallback, or bypass permissions.")
 
 
