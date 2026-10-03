@@ -29,6 +29,14 @@ SCHEMA = {
     }
 }
 
+# The read-only sandbox only covers Codex's shell. MCP servers, plugins,
+# connectors and browser tools from the user's config run outside it, and the
+# prompt carries untrusted PR text. These go before `exec`: Codex drops the
+# configured prefix's -c options once `exec` has overrides of its own.
+CODEX_ISOLATION = ["--disable", "apps", "--disable", "plugins", "--disable", "browser_use",
+                   "--disable", "computer_use", "--disable", "in_app_browser",
+                   "-c", 'web_search="disabled"']
+
 
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
@@ -245,8 +253,9 @@ User profile:\n""" + cfg["profile"] + "\nEvidence:\n" + dumps(snapshot)
     else:
         schema = state / "outcome-schema.json"
         write_private(schema, dumps(SCHEMA))
-        command(cfg.get("codex_command", ["codex"]) + ["exec", "--skip-git-repo-check", "--output-schema", str(schema),
-                 "--output-last-message", str(output), "--sandbox", "read-only", "--ephemeral", "-"], cfg["agent_timeout_seconds"], prompt, state)
+        command(cfg.get("codex_command", ["codex"]) + CODEX_ISOLATION + ["exec", "--ignore-user-config",
+                 "--skip-git-repo-check", "--output-schema", str(schema), "--output-last-message", str(output),
+                 "--sandbox", "read-only", "--ephemeral", "-"], cfg["agent_timeout_seconds"], prompt, state)
         raw = output.read_text(encoding="utf-8")
     outcome = json.loads(raw)
     if not isinstance(outcome, dict) or set(outcome) != {"recommendation", "summary", "changes"}:

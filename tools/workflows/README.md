@@ -48,16 +48,24 @@ remote file access or a configured delivery command. There is no localhost serve
 
 ## Agent and delivery commands
 
-By default the tool runs `codex exec --skip-git-repo-check --output-schema ...
---output-last-message ... --sandbox read-only --ephemeral -` from the private state
-directory. It sends the prompt on stdin and keeps Codex's normal permission policy.
-The prompt forbids tool actions and treats PR bodies as untrusted evidence. A
-read-only sandbox still permits reads; use a separately isolated agent environment
-if your threat model requires blocking access to other readable machine files.
+By default the tool runs `codex exec --ignore-user-config --skip-git-repo-check
+--output-schema ... --output-last-message ... --sandbox read-only --ephemeral -`
+from the private state directory. It sends the prompt on stdin and keeps Codex's
+normal permission policy. The prompt forbids tool actions and treats PR bodies as
+untrusted evidence. A read-only sandbox still permits reads; use a separately
+isolated agent environment if your threat model requires blocking access to other
+readable machine files.
+
+The sandbox covers only Codex's shell. MCP servers, plugins, connectors, and
+browser tools run outside it, so the summarizer gets none of them: the run skips
+`~/.codex/config.toml`, where MCP servers are configured, and turns off apps,
+plugins, browser and computer use, and web search. Codex still uses its saved
+login.
 
 `codex_command` supplies the Codex executable and global options while retaining
 the built-in schema, output validation, and read-only sandbox. The example config
-uses GPT-6.1 Sol with medium reasoning and an absolute executable path. It uses
+uses GPT-6.1 Sol with medium reasoning and an absolute executable path. Because
+the run skips `config.toml`, set the model and reasoning effort here. It uses
 the existing Codex login; do not add API credentials to enable subscription work.
 
 To use another summarizer, add `agent_command` as an argv array. It receives the

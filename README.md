@@ -242,6 +242,16 @@ Run the dependency-free test suite with:
 ./tests/test.sh
 ```
 
+That covers the installer and `usage`. To also run every suite under `tools/`,
+which needs Python 3.9+ and, for comms and the T3 adapter, Bun:
+
+```sh
+./tests/all.sh
+PYTHON=/usr/bin/python3 ./tests/all.sh   # the same with macOS's Python 3.9
+```
+
+It reports passed, skipped, and failed suites, and exits nonzero on any failure.
+
 Set `AGENTS_SOURCE_DIR` to install or update from a local checkout instead of GitHub.
 
 ## Skills still wanted
