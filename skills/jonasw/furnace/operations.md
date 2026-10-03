@@ -30,7 +30,8 @@ All result fields are strings. Omitted fields retain the previous checkpoint.
 For automatic quota continuation, also save the actual `session_id`, `session_kind`
 (`cli` or `t3`) and authorized `resume_expires` timestamp with a timezone. The
 workflow can arm the existing service after the runner exits when `auto_resume`
-is enabled in private configuration. It refuses to infer these values.
+is enabled in private configuration. It refuses to infer these values. A new claim
+drops the previous run's session fields, so each run saves its own.
 
 ```json
 {

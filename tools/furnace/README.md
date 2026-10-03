@@ -79,7 +79,9 @@ an authorized `resume_expires` timestamp in its checkpoint before it hits quota.
 When that checkpoint says `waiting_quota`, the workflow delegates arming to the
 existing auto-resume service and saves the receipt. Missing session metadata or
 an adapter refusal leaves the checkpoint visible with a setup/recovery message;
-Furnace never guesses a session. `resume_state_dir` can name your existing queue.
+Furnace never guesses a session. A new claim drops the previous run's session
+fields, so a requeued item cannot resume an old session. `resume_state_dir` can
+name your existing queue.
 The adapter's idle-thread and dispatch guards still apply after the runner exits.
 
 Check the exact weekly label with `python3 bin/usage --json --only PROVIDER` from

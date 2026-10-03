@@ -259,6 +259,23 @@ class FurnaceTests(unittest.TestCase):
         self.assertEqual(job[2], self.stub_cfg["session"]["session_id"])
         self.assertEqual(self.workflow()["status"], "busy")
 
+    def test_requeued_item_never_resumes_the_previous_runs_session(self):
+        ready = self.ready()
+        first = self.command("claim", ready["id"], "--owner", "first run")
+        self.checkpoint(first, "blocked", summary="Stopped on a failing check",
+                        session_id="00000000-0000-4000-8000-000000000003", session_kind="cli",
+                        resume_expires=(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=2)).isoformat())
+        self.command("edit", ready["id"], "--status", "ready")
+        self.workflow_cfg["furnace"].update(auto_resume=True, resume_state_dir=str(self.home / "queue"))
+        self.stub_cfg["status"] = "waiting_quota"
+        result = self.workflow()
+        self.assertEqual(result["status"], "waiting_quota")
+        self.assertIsNone(result["continuation"])
+        self.assertIn("exact session_id", result["resume_error"])
+        self.assertNotIn("session_id", result["result"])
+        self.assertFalse((self.home / "queue/jobs.sqlite3").exists())
+        self.assertEqual(result["result"]["summary"], "Finished behavior change.")
+
     def test_missing_session_keeps_checkpoint_without_guessing(self):
         self.ready()
         self.workflow_cfg["furnace"]["auto_resume"] = True
