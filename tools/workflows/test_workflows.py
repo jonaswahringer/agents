@@ -186,10 +186,32 @@ class WorkflowTests(unittest.TestCase):
         self.cfg.write_text(json.dumps(config))
         self.assertEqual(self.run_cli()["status"], "succeeded")
         args = json.loads((self.root / "codex-args.json").read_text())
-        self.assertEqual(args[:5], prefix[4:] + ["exec"])
+        self.assertEqual(args[:4], prefix[4:])
         self.assertEqual(args[args.index("--sandbox") + 1], "read-only")
         self.assertIn("--output-schema", args)
         self.assertIn("--ephemeral", args)
+
+    def test_codex_summarizer_gets_no_tools_outside_the_sandbox(self):
+        # MCP servers, plugins, connectors and browser tools run outside the
+        # read-only sandbox, and the prompt carries untrusted PR text.
+        config = json.loads(self.cfg.read_text())
+        del config["agent_command"]
+        prefix = self.cmd("codex") + ["-c", 'model_reasoning_effort="medium"']
+        config["codex_command"] = prefix
+        self.cfg.write_text(json.dumps(config))
+        self.assertEqual(self.run_cli()["status"], "succeeded")
+        args = json.loads((self.root / "codex-args.json").read_text())
+        exec_at = args.index("exec")
+        self.assertIn("--ignore-user-config", args[exec_at:])
+        # Codex drops the prefix's -c options once exec has its own, so every
+        # override goes before exec, next to the configured ones.
+        self.assertNotIn("-c", args[exec_at:])
+        self.assertNotIn("--disable", args[exec_at:])
+        overrides = args[:exec_at]
+        for feature in ("apps", "plugins", "browser_use", "computer_use", "in_app_browser"):
+            self.assertIn(["--disable", feature], [overrides[i:i + 2] for i in range(len(overrides) - 1)])
+        self.assertEqual(overrides[overrides.index('web_search="disabled"') - 1], "-c")
+        self.assertIn('model_reasoning_effort="medium"', overrides)
 
 
 if __name__ == "__main__":
