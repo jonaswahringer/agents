@@ -12,8 +12,8 @@ import uuid
 
 ROOT = Path(__file__).resolve().parents[2]
 STATUSES = ("idea", "ready", "running", "waiting_quota", "review", "done", "blocked", "dropped")
-FIELDS = {"summary", "changes", "checks", "missing", "next_action", "merge", "pr", "branch", "worktree", "report",
-          "session_id", "session_kind", "resume_expires"}
+SESSION_FIELDS = {"session_id", "session_kind", "resume_expires"}
+FIELDS = {"summary", "changes", "checks", "missing", "next_action", "merge", "pr", "branch", "worktree", "report"} | SESSION_FIELDS
 
 
 def now():
@@ -124,7 +124,11 @@ def claim(db, owner, key=None):
                 return {"status": "idle", "reason": "no unclaimed ready work"}
             current = item(db, row[0])
         run_id = str(uuid.uuid4())
-        db.execute("UPDATE items SET status='running',run_id=?,updated=? WHERE id=?", (run_id, now(), current["id"]))
+        # A session belongs to the run that saved it; a new run must save its own
+        # before anything can resume it. The rest of the handoff carries over.
+        result = {k: v for k, v in current["result"].items() if k not in SESSION_FIELDS}
+        db.execute("UPDATE items SET status='running',run_id=?,result=?,updated=? WHERE id=?",
+                   (run_id, json.dumps(result), now(), current["id"]))
         db.execute("INSERT INTO runs VALUES(?,?,?,?,?,?,?,?,?)", (run_id, current["id"], owner, now(), now(), "running", None, None, "{}"))
         event(db, current["id"], "claimed", {"run_id": run_id, "owner": owner})
     return item(db, current["id"])
@@ -209,6 +213,8 @@ def arm(db, current, state, args):
                "--provider", args.provider, "--kind", args.kind, "--target", args.target,
                "--cwd", current["result"].get("worktree") or current["repo"], "--expires", args.expires,
                "--same-account", "--prompt", prompt(current, state)]
+    if args.reserve_percent is not None:
+        command += ["--reserve-percent", str(args.reserve_percent)]
     try:
         reply = subprocess.run(command, text=True, capture_output=True, timeout=60)
         if reply.returncode:
@@ -281,6 +287,7 @@ def main(argv=None):
     p.add_argument("--target", required=True)
     p.add_argument("--expires", required=True)
     p.add_argument("--same-account", action="store_true")
+    p.add_argument("--reserve-percent", type=float, help="hold the continuation while any window is at this reserve")
     p.add_argument("--resume-state-dir", type=Path, default=default_state().parent / "auto-resume")
     p = sub.add_parser("clear-resume")
     p.add_argument("id")

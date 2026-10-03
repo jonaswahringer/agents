@@ -3,10 +3,12 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import signal
 import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -215,6 +217,59 @@ class FurnaceTests(unittest.TestCase):
         self.assertIn("timed out", outcome["dispatch_error"])
         self.assertEqual(self.workflow()["status"], "idle")
 
+    def test_interrupting_workflow_stops_agent_and_descendants(self):
+        ready = self.ready()
+        worker = self.home / "interruptible_agent.py"
+        worker.write_text('''
+import os, pathlib, subprocess, sys, time
+home, role = pathlib.Path(sys.argv[1]), sys.argv[2]
+if role == "agent":
+    subprocess.Popen([sys.executable, __file__, str(home), "descendant"])
+(home / (role + ".pid")).write_text(str(os.getpid()))
+while not (home / "release").exists():
+    time.sleep(0.01)
+(home / (role + ".continued")).write_text("still working")
+''')
+        self.workflow_cfg["furnace"].update(
+            agent_command=[sys.executable, str(worker), str(self.home), "agent"],
+            agent_timeout_seconds=30)
+        self.cfg.write_text(json.dumps(self.workflow_cfg))
+        for signum in (signal.SIGTERM, signal.SIGINT):
+            with self.subTest(signal=signum):
+                process = subprocess.Popen(
+                    [sys.executable, str(WORKFLOW), "run", "furnace", "--config", str(self.cfg),
+                     "--furnace-state-dir", str(self.state)], env=self.env,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                try:
+                    deadline = time.monotonic() + 5
+                    while not (self.home / "descendant.pid").exists():
+                        self.assertIsNone(process.poll(), "workflow exited before agent startup")
+                        self.assertLess(time.monotonic(), deadline, "agent did not start")
+                        time.sleep(0.01)
+                    process.send_signal(signum)
+                    process.communicate(timeout=5)
+                    self.assertNotEqual(process.returncode, 0)
+                    (self.home / "release").touch()
+                    time.sleep(0.3)
+                    self.assertFalse((self.home / "agent.continued").exists(), "agent survived interruption")
+                    self.assertFalse((self.home / "descendant.continued").exists(), "descendant survived interruption")
+                    self.assertEqual(self.workflow()["status"], "busy")
+                finally:
+                    if process.poll() is None:
+                        process.kill()
+                    process.communicate(timeout=5)
+                    # Also clean up the deliberately orphaned children on a failing run.
+                    pid_file = self.home / "agent.pid"
+                    if pid_file.exists():
+                        try:
+                            os.killpg(int(pid_file.read_text()), signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                    for name in ("agent.pid", "descendant.pid", "release", "agent.continued", "descendant.continued"):
+                        (self.home / name).unlink(missing_ok=True)
+                    owned = self.command("show", ready["id"])
+                    self.checkpoint(owned, "ready", summary="Test agent stopped; safe to requeue")
+
     def test_waiting_quota_holds_claim_and_arms_real_service(self):
         ready = self.ready()
         owned = self.command("claim", ready["id"], "--owner", "session")
@@ -258,6 +313,37 @@ class FurnaceTests(unittest.TestCase):
         self.assertEqual(job[1], "pending")
         self.assertEqual(job[2], self.stub_cfg["session"]["session_id"])
         self.assertEqual(self.workflow()["status"], "busy")
+
+    def test_requeued_item_never_resumes_the_previous_runs_session(self):
+        ready = self.ready()
+        first = self.command("claim", ready["id"], "--owner", "first run")
+        self.checkpoint(first, "blocked", summary="Stopped on a failing check",
+                        session_id="00000000-0000-4000-8000-000000000003", session_kind="cli",
+                        resume_expires=(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=2)).isoformat())
+        self.command("edit", ready["id"], "--status", "ready")
+        self.workflow_cfg["furnace"].update(auto_resume=True, resume_state_dir=str(self.home / "queue"))
+        self.stub_cfg["status"] = "waiting_quota"
+        result = self.workflow()
+        self.assertEqual(result["status"], "waiting_quota")
+        self.assertIsNone(result["continuation"])
+        self.assertIn("exact session_id", result["resume_error"])
+        self.assertNotIn("session_id", result["result"])
+        self.assertFalse((self.home / "queue/jobs.sqlite3").exists())
+        self.assertEqual(result["result"]["summary"], "Finished behavior change.")
+
+    def test_workflow_continuation_keeps_the_reserve_and_weekly_reset(self):
+        self.ready()
+        weekly_reset = dt.datetime.fromisoformat(self.stub_cfg["quota"][0]["windows"][0]["resets_at"])
+        self.workflow_cfg["furnace"].update(auto_resume=True, resume_state_dir=str(self.home / "queue"))
+        self.stub_cfg.update(status="waiting_quota", session={
+            "session_id": "00000000-0000-4000-8000-000000000004", "session_kind": "cli",
+            "resume_expires": (weekly_reset + dt.timedelta(hours=48)).isoformat()})
+        result = self.workflow()
+        self.assertIsNone(result["resume_error"])
+        with sqlite3.connect(self.home / "queue/jobs.sqlite3") as db:
+            expires, reserve = db.execute("SELECT expires,reserve FROM jobs").fetchone()
+        self.assertAlmostEqual(expires, weekly_reset.timestamp(), places=3)
+        self.assertEqual(reserve, 10)
 
     def test_missing_session_keeps_checkpoint_without_guessing(self):
         self.ready()

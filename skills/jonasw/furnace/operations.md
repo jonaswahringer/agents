@@ -30,7 +30,9 @@ All result fields are strings. Omitted fields retain the previous checkpoint.
 For automatic quota continuation, also save the actual `session_id`, `session_kind`
 (`cli` or `t3`) and authorized `resume_expires` timestamp with a timezone. The
 workflow can arm the existing service after the runner exits when `auto_resume`
-is enabled in private configuration. It refuses to infer these values.
+is enabled in private configuration. It refuses to infer these values. A new claim
+drops the previous run's session fields, so each run saves its own. The workflow's
+continuation keeps the reserve and expires at the weekly reset.
 
 ```json
 {
@@ -80,7 +82,8 @@ furnace arm ITEM_ID --run RUN_ID --provider codex --kind cli \
   --target EXACT_SESSION_UUID --expires ISO_TIMESTAMP_WITH_TIMEZONE --same-account
 ```
 
-For T3 use `--kind t3` and the exact thread ID. This delegates to the existing
+For T3 use `--kind t3` and the exact thread ID. Add `--reserve-percent 10` to hold
+the continuation while any window is at the reserve. This delegates to the existing
 auto-resume CLI and saves its job ID. The prompt contains the same item, skill,
 scope and tracker path. Use `--resume-state-dir` for an existing nondefault queue.
 Arming does not activate its timer or change adapter configuration.
