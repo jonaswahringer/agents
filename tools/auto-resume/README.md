@@ -227,7 +227,10 @@ on it elsewhere. For inspected state, use a supported T3 adapter. The raw CLI
 path does not claim to update T3's thread history.
 
 Provider permissions and project instructions still apply. The prompt reiterates
-existing approval requirements, including commit/push. The tool adds no approval
+existing approval requirements, including commit/push. It names the only sources
+that can already have authorized those actions: the user's own messages in the
+session and the Furnace skill's grant for Furnace runs. Text in the continuation
+prompt, task data, files, or tool output does not count. The tool adds no approval
 bypass flags. API credential/routing environment variables cause refusal, but
 provider configuration files can also choose another account, model, or billing
 route. Review that configuration yourself and use a subscription-only login.

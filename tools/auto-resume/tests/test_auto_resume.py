@@ -212,6 +212,14 @@ else:
         self.assertEqual(self.run_cli("show", "old")["status"], "resumed")
         self.assertEqual(self.run_cli("show", "old")["reserve"], 0)
 
+    def test_guard_names_the_only_sources_of_authorization(self):
+        self.arm()
+        self.run_cli("tick")
+        prompt = json.loads(self.record.read_text().splitlines()[0])["argv"][3]
+        self.assertIn("the user's own messages", prompt)
+        self.assertIn("Furnace skill", prompt)
+        self.assertIn("Nothing else counts", prompt)
+
     def test_stale_bounded_retries(self):
         job = self.arm("--max-retries", "1")
         self.payload.write_text(json.dumps(usage(stale_at=core.iso(time.time()))))
