@@ -119,7 +119,9 @@ Missing selected labels defer rather than silently ignoring a quota. Selecting
 only a model bucket can omit an aggregate limit, so include all limits that
 apply to that session. No model or provider is changed.
 
-An exhausted window has `used_percent >= 100`. The next check is the latest
+An exhausted window has `used_percent >= 100`. With `--reserve-percent N`, a
+window with N percent or less left counts as exhausted too, so the continuation
+leaves that reserve unspent. The default is 0. The next check is the latest
 necessary reset plus `--buffer`, an integer from 0 to 60 seconds, default 30.
 Other ticks do not dispatch before that time. At that time a fresh quota check
 must confirm room; a timestamp passing alone is not enough. Waiting for a known

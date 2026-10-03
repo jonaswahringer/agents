@@ -137,10 +137,14 @@ def main(args, command):
                     resume_error = "Save the exact session_id, session_kind and authorized resume_expires before arming."
                 else:
                     import argparse
-                    arm_args = argparse.Namespace(run=run_id, provider=cfg["provider"], kind=result["session_kind"],
-                        target=result["session_id"], expires=result["resume_expires"], same_account=True,
-                        resume_state_dir=Path(cfg.get("resume_state_dir", str(tracker.default_state().parent / "auto-resume"))))
                     try:
+                        # Like the run itself, the continuation keeps the reserve and
+                        # never spends allowance from after the weekly reset.
+                        expires = min(resume.timestamp(result["resume_expires"]), resume.timestamp(eligible["weekly_reset"]))
+                        arm_args = argparse.Namespace(run=run_id, provider=cfg["provider"], kind=result["session_kind"],
+                            target=result["session_id"], expires=resume.iso(expires), same_account=True,
+                            reserve_percent=cfg["reserve_percent"],
+                            resume_state_dir=Path(cfg.get("resume_state_dir", str(tracker.default_state().parent / "auto-resume"))))
                         continuation = tracker.arm(db, latest, state, arm_args)
                     except ValueError as error:
                         resume_error = str(error)

@@ -276,6 +276,20 @@ class FurnaceTests(unittest.TestCase):
         self.assertFalse((self.home / "queue/jobs.sqlite3").exists())
         self.assertEqual(result["result"]["summary"], "Finished behavior change.")
 
+    def test_workflow_continuation_keeps_the_reserve_and_weekly_reset(self):
+        self.ready()
+        weekly_reset = dt.datetime.fromisoformat(self.stub_cfg["quota"][0]["windows"][0]["resets_at"])
+        self.workflow_cfg["furnace"].update(auto_resume=True, resume_state_dir=str(self.home / "queue"))
+        self.stub_cfg.update(status="waiting_quota", session={
+            "session_id": "00000000-0000-4000-8000-000000000004", "session_kind": "cli",
+            "resume_expires": (weekly_reset + dt.timedelta(hours=48)).isoformat()})
+        result = self.workflow()
+        self.assertIsNone(result["resume_error"])
+        with sqlite3.connect(self.home / "queue/jobs.sqlite3") as db:
+            expires, reserve = db.execute("SELECT expires,reserve FROM jobs").fetchone()
+        self.assertAlmostEqual(expires, weekly_reset.timestamp(), places=3)
+        self.assertEqual(reserve, 10)
+
     def test_missing_session_keeps_checkpoint_without_guessing(self):
         self.ready()
         self.workflow_cfg["furnace"]["auto_resume"] = True

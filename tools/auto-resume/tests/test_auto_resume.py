@@ -54,6 +54,13 @@ class QuotaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.quota(usage([window(used=100, reset=core.iso(20))]), "codex", [], 100, 30)
 
+    def test_reserve_waits_like_an_exhausted_window(self):
+        payload = usage([window("5h", 89, core.iso(200)), window("week", 95, core.iso(500))])
+        self.assertIsNone(core.quota(payload, "codex", [], 100, 30))
+        self.assertEqual(core.quota(payload, "codex", [], 100, 30, reserve=10), 530)
+        self.assertEqual(core.quota(payload, "codex", [], 100, 30, reserve=11), 530)
+        self.assertIsNone(core.quota(payload, "codex", ["5h"], 100, 30, reserve=10))
+
 
 class CliTests(unittest.TestCase):
     def setUp(self):
@@ -171,6 +178,39 @@ else:
         self.change(job["id"], next_check=0)
         self.run_cli("tick")
         self.assertEqual(self.show(job)["status"], "resumed")
+
+    def test_reserve_holds_continuation_until_the_window_resets(self):
+        job = self.arm("--reserve-percent", "10")
+        self.assertEqual(job["reserve"], 10)
+        reset = time.time() + 200
+        self.payload.write_text(json.dumps(usage([window("5h", 20, core.iso(reset - 100)), window("week", 95, core.iso(reset))])))
+        self.run_cli("tick")
+        self.assertFalse(self.record.exists())
+        self.assertEqual(self.show(job)["status"], "pending")
+        self.assertAlmostEqual(self.show(job)["next_check"], reset + 30, places=4)
+        self.assertIn("reserve", self.show(job)["message"])
+        self.run_cli("arm", "--provider", "codex", "--target", str(uuid.uuid4()), "--cwd", str(self.cwd),
+                     "--expires", core.iso(time.time() + 3600), "--prompt", "x", "--same-account",
+                     "--reserve-percent", "100", ok=False)
+
+    def test_jobs_armed_before_the_reserve_existed_still_dispatch(self):
+        with sqlite3.connect(self.state / "jobs.sqlite3") as db:
+            db.execute("""CREATE TABLE jobs (
+                id TEXT PRIMARY KEY, provider TEXT NOT NULL, kind TEXT NOT NULL,
+                target TEXT NOT NULL, cwd TEXT NOT NULL, prompt TEXT NOT NULL,
+                expires REAL NOT NULL, buffer INTEGER NOT NULL, windows TEXT NOT NULL,
+                max_retries INTEGER NOT NULL, max_attempts INTEGER NOT NULL,
+                retries INTEGER NOT NULL DEFAULT 0, attempts INTEGER NOT NULL DEFAULT 0,
+                revision TEXT, status TEXT NOT NULL, next_check REAL NOT NULL,
+                created REAL NOT NULL, updated REAL NOT NULL, message TEXT NOT NULL)""")
+            now = time.time()
+            db.execute("""INSERT INTO jobs(id,provider,kind,target,cwd,prompt,expires,buffer,windows,max_retries,
+                max_attempts,status,next_check,created,updated,message) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                ("old", "codex", "cli", self.target, str(self.cwd.resolve()), "Finish", now + 3600, 30, "[]", 3, 3,
+                 "pending", now, now, now, "armed"))
+        self.run_cli("tick")
+        self.assertEqual(self.run_cli("show", "old")["status"], "resumed")
+        self.assertEqual(self.run_cli("show", "old")["reserve"], 0)
 
     def test_stale_bounded_retries(self):
         job = self.arm("--max-retries", "1")

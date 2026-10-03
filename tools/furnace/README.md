@@ -77,11 +77,12 @@ To arm continuations automatically after the runner exits, set `auto_resume` tru
 The runner must save its actual `session_id`, `session_kind` (`cli` or `t3`) and
 an authorized `resume_expires` timestamp in its checkpoint before it hits quota.
 When that checkpoint says `waiting_quota`, the workflow delegates arming to the
-existing auto-resume service and saves the receipt. Missing session metadata or
-an adapter refusal leaves the checkpoint visible with a setup/recovery message;
-Furnace never guesses a session. A new claim drops the previous run's session
-fields, so a requeued item cannot resume an old session. `resume_state_dir` can
-name your existing queue.
+existing auto-resume service and saves the receipt. That continuation keeps the
+configured reserve and expires at the weekly reset, even if the checkpoint asked
+for later. Missing session metadata or an adapter refusal leaves the checkpoint
+visible with a setup/recovery message; Furnace never guesses a session. A new
+claim drops the previous run's session fields, so a requeued item cannot resume
+an old session. `resume_state_dir` can name your existing queue.
 The adapter's idle-thread and dispatch guards still apply after the runner exits.
 
 Check the exact weekly label with `python3 bin/usage --json --only PROVIDER` from
@@ -121,7 +122,8 @@ python3 tools/furnace/furnace.py arm ITEM_ID --run RUN_ID \
 ```
 
 Use the actual account, idle session ID and expiry, not these placeholders. Use
-`--kind t3` for a T3 thread and `--resume-state-dir` for a custom queue. This stores
+`--kind t3` for a T3 thread and `--resume-state-dir` for a custom queue. Add
+`--reserve-percent 10` to keep the reserve as scheduled runs do. This stores
 the auto-resume job ID and includes the original scope and checkpoint in its prompt.
 The existing service checks all quota windows and allows one accepted continuation.
 The agent still needs to finish the task and write its result. Another quota stop

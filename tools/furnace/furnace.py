@@ -213,6 +213,8 @@ def arm(db, current, state, args):
                "--provider", args.provider, "--kind", args.kind, "--target", args.target,
                "--cwd", current["result"].get("worktree") or current["repo"], "--expires", args.expires,
                "--same-account", "--prompt", prompt(current, state)]
+    if args.reserve_percent is not None:
+        command += ["--reserve-percent", str(args.reserve_percent)]
     try:
         reply = subprocess.run(command, text=True, capture_output=True, timeout=60)
         if reply.returncode:
@@ -285,6 +287,7 @@ def main(argv=None):
     p.add_argument("--target", required=True)
     p.add_argument("--expires", required=True)
     p.add_argument("--same-account", action="store_true")
+    p.add_argument("--reserve-percent", type=float, help="hold the continuation while any window is at this reserve")
     p.add_argument("--resume-state-dir", type=Path, default=default_state().parent / "auto-resume")
     p = sub.add_parser("clear-resume")
     p.add_argument("id")
