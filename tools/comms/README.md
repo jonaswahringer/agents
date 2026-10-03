@@ -31,6 +31,14 @@ the HTML upload tool. It was called `postplan-local` before it moved into this r
   works: glossary links, collapsible sections, reader-hidden blocks.
 - **Local recordings play.** `media-src 'self'` lets a document play recordings
   served by this host. It does not allow video from other hosts or ports.
+- **Recording pages work on phones and laptops.** The player keeps native
+  playback, seeking and fullscreen controls, with inline playback on iPhone.
+  It loads metadata before you press play, shows an indeterminate loading bar
+  during buffering and seeking, and offers retry after a slow load or error.
+  Retry resumes from the previous position. The layout fits small screens and
+  follows the device's light or dark appearance. Download remains available if
+  the browser cannot play the format. These controls apply to `/m/` recording
+  pages; videos inside uploaded HTML use that document's own player.
 
 So a document is checked twice. `src/html-policy.js` rejects, at upload time:
 external scripts (`<script src>` and the SVG spelling `<script href>`), forms,

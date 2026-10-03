@@ -59,6 +59,10 @@ test("publishing a recording returns working player, media and download links", 
   expect(player.status).toBe(200);
   expect(player.headers.get("content-security-policy")).toContain("media-src 'self'");
   const html = await player.text();
+  const nonce = html.match(/<script nonce="([^"]+)"/)[1];
+  expect(player.headers.get("content-security-policy")).toContain(`script-src 'nonce-${nonce}'`);
+  expect(player.headers.get("content-security-policy")).not.toContain("script-src 'unsafe-inline'");
+  expect(player.headers.get("cache-control")).toBe("no-store");
   expect(html).toContain(`<video controls playsinline preload="metadata"`);
   expect(html).toContain(`/media/${result.mediaId}`);
   expect(html).toContain("Download recording");

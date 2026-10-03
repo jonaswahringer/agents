@@ -1,3 +1,5 @@
+import { initializePlayer } from "./player.js";
+
 export function renderHome({ publicBaseUrl }) {
   return htmlPage({
     title: "Postplan",
@@ -26,15 +28,21 @@ export function renderNotFound() {
   });
 }
 
-export function renderMediaPage({ filename, mediaPath, downloadPath }) {
+export function renderMediaPage({ filename, mediaPath, downloadPath, nonce }) {
   return htmlPage({
     title: filename,
-    body: `<main class="home">
+    body: `<main class="home player">
       <h1>${escapeHtml(filename)}</h1>
-      <video controls playsinline preload="metadata" style="width:100%;max-height:70vh" src="${escapeHtml(mediaPath)}"></video>
-      <p><a href="${escapeHtml(downloadPath)}" download>Download recording</a></p>
-      <p>If this browser cannot play the recording, download it to open in a video player.</p>
-    </main>`
+      <video controls playsinline preload="metadata" id="recording" aria-label="${escapeHtml(filename)}" src="${escapeHtml(mediaPath)}"></video>
+      <div id="player-status" class="player-status" hidden>
+        <p id="player-message" role="status" aria-live="polite" aria-atomic="true"></p>
+        <progress id="player-progress" aria-label="Loading video" hidden></progress>
+        <button id="player-retry" type="button" hidden>Retry playback</button>
+      </div>
+      <p><a class="download" href="${escapeHtml(downloadPath)}" download>Download recording</a></p>
+      <noscript><p>Use the video controls to play, or download the recording.</p></noscript>
+    </main>
+    <script nonce="${escapeHtml(nonce)}">(${initializePlayer.toString()})();</script>`
   });
 }
 
@@ -78,6 +86,22 @@ function htmlPage({ title, body }) {
       border: 1px solid #d1d5db;
       background: #ffffff;
       border-radius: 6px;
+    }
+
+    .player { margin: 24px auto; padding: 0 max(16px, env(safe-area-inset-left)) 24px max(16px, env(safe-area-inset-right)); }
+    .player h1 { font-size: clamp(20px, 4vw, 30px); overflow-wrap: anywhere; }
+    .player video { display: block; width: 100%; min-height: 180px; max-height: 70vh; max-height: 70svh; background: #000; border-radius: 10px; }
+    .player-status { padding: 12px 0; }
+    .player-status p { margin: 0 0 8px; }
+    .player progress { width: 100%; height: 8px; accent-color: #1d4ed8; }
+    .player button, .download { min-height: 44px; box-sizing: border-box; padding: 12px 16px; font: inherit; border-radius: 8px; }
+    .player button { border: 0; background: #1d4ed8; color: white; cursor: pointer; margin-top: 8px; }
+    .download { display: inline-flex; align-items: center; color: #1d4ed8; background: #e2e8f0; }
+    .player :focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
+    @media (prefers-color-scheme: dark) {
+      body:has(.player) { background: #0f172a; color: #f1f5f9; }
+      .player p { color: #cbd5e1; }
+      .download { background: #1e293b; color: #93c5fd; }
     }
   </style>
 </head>
