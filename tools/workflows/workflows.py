@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Run bounded, persistent update digest jobs. Requires Python 3.9+."""
 import argparse
+import contextlib
 import datetime as dt
 import fcntl
 import hashlib
@@ -53,18 +54,45 @@ def write_private(path, content):
 def command(argv, timeout, stdin=None, cwd=None):
     if not isinstance(argv, list) or not argv or not all(isinstance(x, str) and x for x in argv):
         raise ValueError("commands must be nonempty arrays of strings")
-    process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE, text=True, cwd=cwd, start_new_session=True)
+    process = None
+    interrupted = None
+    signals = (signal.SIGTERM, signal.SIGINT)
+    handlers = {signum: signal.getsignal(signum) for signum in signals}
+
+    def interrupt(signum, frame):
+        nonlocal interrupted
+        interrupted = signum
+        # If Popen is still starting, let it return the child PID before unwinding.
+        if process is not None:
+            raise SystemExit(128 + signum)
+
     try:
+        for signum in signals:
+            signal.signal(signum, interrupt)
+        process = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, cwd=cwd, start_new_session=True)
+        if interrupted is not None:
+            raise SystemExit(128 + interrupted)
         output, error = process.communicate(stdin, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        os.killpg(process.pid, signal.SIGKILL)
-        process.communicate()
-        raise RuntimeError("command timed out: " + argv[0]) from None
-    if process.returncode:
-        raise RuntimeError("command failed (%s): %s: %s" %
-                           (process.returncode, argv[0], error.strip()[-2000:]))
-    return output
+        if process.returncode:
+            raise RuntimeError("command failed (%s): %s: %s" %
+                               (process.returncode, argv[0], error.strip()[-2000:]))
+        return output
+    except BaseException as error:
+        # Finish cleanup before releasing the caller's scheduler lock. Repeated
+        # stop signals must not interrupt process-group termination and reaping.
+        for signum in signals:
+            signal.signal(signum, signal.SIG_IGN)
+        if process is not None:
+            with contextlib.suppress(ProcessLookupError):
+                os.killpg(process.pid, signal.SIGKILL)
+            process.communicate()
+        if isinstance(error, subprocess.TimeoutExpired):
+            raise RuntimeError("command timed out: " + argv[0]) from None
+        raise
+    finally:
+        for signum, handler in handlers.items():
+            signal.signal(signum, handler)
 
 
 def load_config(path):

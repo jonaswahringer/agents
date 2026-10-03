@@ -100,6 +100,9 @@ python3 tools/workflows/workflows.py history furnace
 independent. Each `run` or `tick` handles at most one item. A claim left by an
 interrupted process or a waiting continuation stops later ticks for inspection.
 No successful process exit is labeled task completion without a checkpoint.
+SIGTERM and Ctrl-C stop the active command's process group, including agent
+children, before the workflow exits. SIGKILL cannot run cleanup; inspect for
+surviving agent processes before recovering a claim after a forced kill.
 
 Scheduled work starts only within 48 hours of the configured weekly reset and
 while every reported window has more than 10% allowance remaining. Missing,
