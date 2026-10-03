@@ -104,6 +104,12 @@ cron, starting with a brief, personalized T3 Code nightly update digest.
 continuations and checks the `usage` command before retrying after a quota reset.
 Both keep their private settings and job state outside this repository.
 
+[`tools/furnace`](tools/furnace/README.md) tracks ideas and agent work in a private
+backlog. Its skill checks existing state and branches, works in separate worktrees,
+and opens PRs for human review without merging. The workflows service can run one
+ready task per tick within 48 hours of a weekly reset, keeping a 10% allowance
+reserve. Quota continuations use auto-resume. Scheduling requires private setup.
+
 See the [compact implementation plan](docs/workflows-auto-resume-plan.md) for
 the service boundaries and verification scope. Their READMEs describe setup and
 cron entries; installing the repository does not activate these tools.
@@ -197,6 +203,7 @@ folder to the repository is enough to make it appear in the menu.
 
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
 - `executive-summary` writes you an executive summary with the bottom line first, so you can stop after one sentence.
+- `furnace` turns spare weekly allowance into reviewable work, with a persistent idea backlog and task history.
 - `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
 - `html-communication` presents an answer as a self-contained HTML page.
 - `nice` makes user-facing answers concise, plain, direct, and honest about evidence.

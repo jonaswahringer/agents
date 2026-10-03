@@ -9,6 +9,12 @@ Requires Python 3.9+, `gh` authenticated for GitHub, a working installed T3 vers
 command, and Codex CLI or another configured summarizer. The installer needs no
 new dependency. The CLI uses only the Python standard library on macOS and Linux.
 
+The named `furnace` workflow runs one ready backlog item when quota and reset
+timing permit it. It uses the private tracker, the user's 48-hour window and 10%
+reserve, and a separately configured subscription agent runner. See
+[Furnace setup](../furnace/README.md). `status furnace` and `history furnace` read
+the tracker; the T3 update digest keeps its existing state and behavior.
+
 ## Setup on the Mac mini
 
 Copy `config.example.json` to `~/.config/agents/workflows.json`, with mode 600.
