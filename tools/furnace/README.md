@@ -6,9 +6,19 @@ standard-library tracker stores ideas, claims, checkpoints and results in SQLite
 The existing workflows service launches tasks; auto-resume handles exact-session
 continuations after a limit. Furnace never merges PRs.
 
-## Use on the Mac mini
+## Use
 
-Run from this checkout, or use its absolute path:
+Fresh installs and `agents update` link the `furnace` command into `~/.local/bin/`.
+Keep that directory in `PATH`. The CLI is installed even when the optional agent
+skill is not selected. Run `agents doctor` to check its link.
+
+```sh
+furnace add 'Investigate a better reconnect flow'
+furnace list
+furnace report
+```
+
+From an uninstalled checkout, use Python directly:
 
 ```sh
 python3 tools/furnace/furnace.py add 'Investigate a better reconnect flow'
@@ -21,7 +31,7 @@ python3 tools/furnace/furnace.py report
 ```
 
 In chat use `$furnace add ...`, `$furnace run`, or `$furnace review`. Installing the
-skill makes these requests discoverable; the tracker does not require installation.
+skill makes these requests discoverable; the tracker works without that skill.
 Use `agents skills` to select `jonasw/furnace` through the normal installer.
 
 State defaults to `$XDG_STATE_HOME/agents/furnace`, or

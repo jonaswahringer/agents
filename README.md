@@ -1,6 +1,23 @@
 # agents
 
-Set up shared instructions and skills for coding agents from one interactive installer.
+Shared instructions, skills, and tools for coding agents. One installer manages
+the agent configuration, selected skills, and local commands.
+
+## What's here
+
+| Tool | What it does | Entry point |
+| --- | --- | --- |
+| `agents` | Installs and updates shared instructions, skills, and commands. | `agents update`, `agents skills`, `agents doctor` |
+| [usage](docs/usage.md) | Shows remaining Claude Code, Codex, and Cursor allowance and reset times. | `usage`, `usage live`, `usage --json` |
+| [Furnace](tools/furnace/README.md) | Saves ideas and tracks agent work, checks, PRs, and next actions. | `furnace add "Idea"`, `furnace list`, `furnace report` |
+| [comms](tools/comms/README.md) | Publishes HTML reports and recordings to URLs reachable over the tailnet. | Postplan CLI for HTML; `bun run publish-media` in `tools/comms` for recordings |
+| [workflows](tools/workflows/README.md) | Runs recurring jobs, including the T3 update digest and ready Furnace tasks. | `python3 tools/workflows/workflows.py` |
+| [auto-resume](tools/auto-resume/README.md) | Continues an explicitly armed session after subscription quota returns. | `tools/auto-resume/auto-resume` |
+
+The installer links `agents`, `usage`, and `furnace` into `~/.local/bin/` on each
+machine. If the `usage` name is taken, it uses `aiusage`. Agent skills are selected
+separately. The services need their own setup; their documentation covers credentials,
+private state, and activation.
 
 ## Install
 
@@ -34,7 +51,9 @@ The global setup asks about you, this machine, network access, how work moves be
 
 ## What gets installed
 
-The managed source lives at `~/.local/share/agents/`, and the `agents` command is linked into `~/.local/bin/`.
+The managed source lives at `~/.local/share/agents/`. The `agents`, `usage`, and
+`furnace` commands are linked into `~/.local/bin/`; keep that directory in `PATH`.
+An unrelated existing command is kept unless you approve its replacement.
 
 Global instructions are written to:
 
@@ -93,26 +112,22 @@ is in use.
 
 ## Tools
 
-`tools/` holds services that live alongside the skills rather than being
-installed by them. [`tools/comms`](tools/comms/README.md) publishes a
-self-contained HTML report to a stable URL on the tailnet, which is where the
-`html-communication` skill sends a write-up you want to read on your phone.
+`tools/` contains the Furnace tracker and the comms, workflows, and auto-resume
+services listed above. Selecting an agent skill does not start a service.
 
-[`tools/workflows`](tools/workflows/README.md) runs recurring jobs from system
-cron, starting with a brief, personalized T3 Code nightly update digest.
-[`tools/auto-resume`](tools/auto-resume/README.md) queues explicitly armed agent
-continuations and checks the `usage` command before retrying after a quota reset.
-Both keep their private settings and job state outside this repository.
+Furnace's CLI is installed automatically on fresh installs and repaired by
+`agents update`. Select the optional `jonasw/furnace` skill through `agents skills`
+to let an agent capture ideas, work in separate worktrees, and open PRs for review.
+The tracker works without that skill. Scheduled runs require private setup, with
+a default 48-hour reset window and 10% allowance reserve.
 
-[`tools/furnace`](tools/furnace/README.md) tracks ideas and agent work in a private
-backlog. Its skill checks existing state and branches, works in separate worktrees,
-and opens PRs for human review without merging. The workflows service can run one
-ready task per tick within 48 hours of a weekly reset, keeping a 10% allowance
-reserve. Quota continuations use auto-resume. Scheduling requires private setup.
+Comms requires Bun and a configured endpoint. Workflows and auto-resume require
+private configuration and timers. Each tool's documentation explains activation.
+The installer starts no server, schedules no job, and launches no agent.
 
-See the [compact implementation plan](docs/workflows-auto-resume-plan.md) for
-the service boundaries and verification scope. Their READMEs describe setup and
-cron entries; installing the repository does not activate these tools.
+The Furnace backlog, workflow history, and continuation queue stay on the machine
+running them, outside Git. Updating on your MacBook does not copy records from
+the Mac mini. Use your existing remote access to work with the Mac mini's backlog.
 
 The comms launchd service and the example cron entries point at this checkout
 rather than at the installed copy. `git clean -xd` here would remove comms
@@ -127,6 +142,10 @@ agents configure
 agents skills
 agents doctor
 ```
+
+Updates restore the local command links as well as the saved skill selection.
+If `furnace` is missing, run `agents update` on that machine, check that
+`~/.local/bin/` is in `PATH`, and use `agents doctor` to inspect its link.
 
 ## See where files come from
 

@@ -861,6 +861,16 @@ install_usage_command() {
   esac
 }
 
+install_furnace_command() {
+  local source="$ROOT/tools/furnace/furnace"
+  [[ -f "$source" ]] || return 0
+  safe_link "$source" "$BIN_DIR/furnace"
+  case ":$PATH:" in
+    *":$BIN_DIR:"*) ;;
+    *) echo "Add $BIN_DIR to your PATH to run 'furnace'." ;;
+  esac
+}
+
 # Links are installed under the plain skill name, because that is the name agents
 # load. The saved file may still hold names from before skills gained folders, so
 # only the last path segment is compared.
@@ -953,6 +963,7 @@ install_command() {
   save_global_state
   sync_skills
   install_usage_command
+  install_furnace_command
   echo
   echo "agents is installed. Run 'agents doctor' to check the setup."
 }
@@ -1210,6 +1221,19 @@ doctor_command() {
       failed=1
     fi
   fi
+  source="$ROOT/tools/furnace/furnace"
+  if [[ -f "$source" ]]; then
+    path="$BIN_DIR/furnace"
+    if link_points_to "$path" "$source"; then
+      echo "ok  $path -> $source"
+    elif [[ -e "$path" || -L "$path" ]]; then
+      echo "conflict  $path does not point at $source"
+      failed=1
+    else
+      echo "missing  $path"
+      failed=1
+    fi
+  fi
   if [[ $verbose -eq 1 ]]; then
     echo
     source_report
@@ -1264,6 +1288,7 @@ reconcile_command() {
   fi
   sync_skills
   install_usage_command
+  install_furnace_command
   report_unselected_skills
 }
 
