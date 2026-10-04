@@ -388,3 +388,4 @@ fi
 
 echo "PASS: installer, skill folders, deduplication, conflicts, and migrations"
 python3 "$ROOT/tests/test_usage.py"
+/bin/bash "$ROOT/tests/test_furnace_install.sh"
