@@ -225,6 +225,7 @@ folder to the repository is enough to make it appear in the menu.
 - `furnace` turns spare weekly allowance into reviewable work, with a persistent idea backlog and task history.
 - `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
 - `html-communication` presents an answer as a self-contained HTML page.
+- `hyperframes-promo` creates product promos under the project's `marketing/` folder, defaults to 60 fps, ignores media files in Git, and delivers videos through comms over Tailscale.
 - `nice` makes user-facing answers concise, plain, direct, and honest about evidence.
 - `note` captures a durable note from the current conversation.
 - `pair` pair-programs with you driving and the agent navigating, keeping taste calls with you and asking what you think before it explains.
