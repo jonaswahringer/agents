@@ -1,122 +1,71 @@
 import { initializePlayer } from "./player.js";
-
-export function renderHome({ publicBaseUrl }) {
-  return htmlPage({
-    title: "Postplan",
-    body: `
-      <main class="home">
-        <h1>Postplan</h1>
-        <p>A Cloudflare Worker for publishing static HTML drafts.</p>
-        <pre>POST /api/uploads</pre>
-        <p><a href="/dashboard">My drafts</a> · <a href="/settings/api-keys">API keys</a></p>
-        <p>Health: <a href="/healthz">/healthz</a></p>
-        <p>Public base URL: ${escapeHtml(publicBaseUrl || "not configured")}</p>
-      </main>
-    `
-  });
-}
+import { escapeHtml, formatSize, ICONS, meta, page, timeAgo } from "./ui.js";
 
 export function renderNotFound() {
-  return htmlPage({
-    title: "Draft not found",
-    body: `
-      <main class="home">
-        <h1>Draft not found</h1>
-        <p>The requested draft is unavailable.</p>
-      </main>
-    `
+  return page({
+    title: "Not found · Comms",
+    styles: `.missing { text-align: center; padding-top: 12vh; } .missing > svg { width: 44px; height: 44px; color: var(--subtle); }
+      .missing h1 { font-size: 24px; margin-top: 14px; } .missing .btn { margin-top: 22px; }`,
+    body: `<main class="wrap missing">
+      ${ICONS.research}
+      <h1>Not found</h1>
+      <p class="sub">This upload was deleted, or the link is wrong.</p>
+      <a class="btn" href="/dashboard">${ICONS.back}Uploads</a>
+    </main>`
   });
 }
 
-export function renderMediaPage({ filename, mediaPath, downloadPath, nonce, size, contentType }) {
-  return htmlPage({
-    title: filename,
-    body: `<main class="home player">
+// back: where "‹ name" returns to, the upload's dashboard group when it has one.
+export function renderMediaPage({ filename, mediaPath, downloadPath, nonce, size, contentType, createdAt, back }) {
+  const backTile = back.logo ? `<span class="tile logo"><img src="${escapeHtml(back.logo)}" alt=""></span>` : "";
+  return page({
+    title: `${filename} · Comms`,
+    styles: PLAYER_STYLES,
+    nonce,
+    script: `(${initializePlayer.toString()})();`,
+    body: `<main class="wrap player">
+      <a class="back" href="${escapeHtml(back.href)}">${ICONS.back}${backTile}<span>${escapeHtml(back.name)}</span></a>
       <h1>${escapeHtml(filename)}</h1>
-      <video playsinline preload="auto" id="recording" aria-label="${escapeHtml(filename)}" data-src="${escapeHtml(mediaPath)}" data-size="${size}" data-type="${escapeHtml(contentType)}"></video>
-      <div id="player-status" class="player-status">
+      <p class="sub">${meta(["Video", formatSize(size), createdAt && `Uploaded ${timeAgo(createdAt)}`])}</p>
+      <div class="stage">
+        <video playsinline preload="auto" id="recording" aria-label="${escapeHtml(filename)}" data-src="${escapeHtml(mediaPath)}" data-size="${size}" data-type="${escapeHtml(contentType)}"></video>
+      </div>
+      <section id="player-status" class="panel" aria-label="Playback">
         <p id="player-message" role="status" aria-live="polite" aria-atomic="true"></p>
         <progress id="player-progress" aria-label="Video buffering progress" max="100" value="0"></progress>
-        <button id="player-play" type="button" disabled>Play</button>
-        <button id="player-full" type="button">Download fully before playing</button>
-        <button id="player-retry" type="button" hidden>Retry playback</button>
-      </div>
-      <p><a class="download" href="${escapeHtml(downloadPath)}" download>Download recording</a></p>
-      <noscript><p>JavaScript is required for buffering. Use the download link to watch the recording.</p></noscript>
-    </main>
-    <script nonce="${escapeHtml(nonce)}">(${initializePlayer.toString()})();</script>`
+        <div class="actions">
+          <button id="player-play" class="btn primary" type="button" disabled>${ICONS.play}Play</button>
+          <button id="player-full" class="btn" type="button">${ICONS.download}Download fully before playing</button>
+          <button id="player-retry" class="btn" type="button" hidden>${ICONS.retry}Retry playback</button>
+          <a class="btn quiet" href="${escapeHtml(downloadPath)}" download>Download recording</a>
+        </div>
+      </section>
+      <noscript><p class="sub">JavaScript is required for buffering. Use the download link to watch the recording.</p></noscript>
+    </main>`
   });
 }
 
-function htmlPage({ title, body }) {
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="icon" href="/favicon.ico">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    body {
-      margin: 0;
-      background: #f8fafc;
-      color: #111827;
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-
-    .home {
-      max-width: 760px;
-      margin: 64px auto;
-      padding: 0 20px;
-    }
-
-    h1 {
-      margin: 0 0 12px;
-      font-size: 40px;
-      line-height: 1.1;
-    }
-
-    p {
-      color: #374151;
-      font-size: 17px;
-      line-height: 1.6;
-    }
-
-    pre {
-      overflow-x: auto;
-      padding: 14px;
-      border: 1px solid #d1d5db;
-      background: #ffffff;
-      border-radius: 6px;
-    }
-
-    .player { margin: 24px auto; padding: 0 max(16px, env(safe-area-inset-left)) 24px max(16px, env(safe-area-inset-right)); }
-    .player h1 { font-size: clamp(20px, 4vw, 30px); overflow-wrap: anywhere; }
-    .player video { display: block; width: 100%; min-height: 180px; max-height: 70vh; max-height: 70svh; background: #000; border-radius: 10px; }
-    .player-status { padding: 12px 0; }
-    .player-status p { margin: 0 0 8px; }
-    .player progress { width: 100%; height: 8px; accent-color: #1d4ed8; }
-    .player button, .download { min-height: 44px; box-sizing: border-box; padding: 12px 16px; font: inherit; border-radius: 8px; }
-    .player button { border: 0; background: #1d4ed8; color: white; cursor: pointer; margin-top: 8px; }
-    .player button:disabled { opacity: .5; cursor: default; }
-    .download { display: inline-flex; align-items: center; color: #1d4ed8; background: #e2e8f0; }
-    .player :focus-visible { outline: 3px solid #2563eb; outline-offset: 3px; }
-    @media (prefers-color-scheme: dark) {
-      body:has(.player) { background: #0f172a; color: #f1f5f9; }
-      .player p { color: #cbd5e1; }
-      .player button:disabled { opacity: .5; cursor: default; }
-    .download { background: #1e293b; color: #93c5fd; }
-    }
-  </style>
-</head>
-<body>${body}</body>
-</html>`;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+const PLAYER_STYLES = `
+  .back { display: inline-flex; align-items: center; gap: 6px; height: 34px; margin: 0 0 12px -8px; padding: 0 12px 0 6px;
+    border-radius: 10px; color: var(--muted); font-size: 14px; font-weight: 560; }
+  .back:hover { background: var(--hover); color: var(--text); }
+  .back > svg { width: 18px; height: 18px; }
+  .back .tile { width: 20px; height: 20px; border-radius: 6px; }
+  .player h1 { font-size: clamp(21px, 4.6vw, 28px); }
+  .stage { margin: 18px 0 14px; border-radius: 18px; overflow: hidden; background: #000;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .1), 0 12px 32px rgba(15, 23, 42, .14); }
+  .stage video { display: block; width: 100%; min-height: 200px; max-height: 72vh; max-height: 72svh; background: #000; }
+  .panel { display: grid; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); }
+  .panel p { margin: 0; font-size: 14px; color: var(--text); min-height: 20px; }
+  .panel progress { -webkit-appearance: none; appearance: none; display: block; width: 100%; height: 6px; border: 0;
+    border-radius: 99px; background: var(--sunken); overflow: hidden; }
+  .panel progress::-webkit-progress-bar { background: var(--sunken); border-radius: 99px; }
+  .panel progress::-webkit-progress-value { background: linear-gradient(90deg, #3b82f6, #7c3aed); border-radius: 99px; transition: width .3s ease; }
+  .panel progress::-moz-progress-bar { background: linear-gradient(90deg, #3b82f6, #7c3aed); border-radius: 99px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  @media (max-width: 520px) {
+    .actions .btn { flex: 1 1 100%; }
+    .stage { border-radius: 14px; }
+  }
+`;

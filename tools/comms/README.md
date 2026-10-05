@@ -123,6 +123,9 @@ Uploads from the same project share one row that expands when tapped; an upload
 with no siblings stays a row of its own. Groups are ordered by their newest
 upload, and items inside a group are newest first. `/dashboard?open=<project>`
 opens with that group expanded.
+A search box and an All / Reports / Videos switch narrow the list; both need
+script, so without it the page shows everything. A recording page links back
+to its group on the dashboard.
 
 Uploads carry no project field, so the project is read from names:
 

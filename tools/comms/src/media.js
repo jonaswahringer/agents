@@ -5,6 +5,7 @@ import { getHomeUrl, getRequestBaseUrl } from "./public-url.js";
 import { renderMediaPage } from "./render.js";
 import { consumeRateLimit } from "./rate-limit.js";
 import { randomToken } from "./crypto.js";
+import { findGroup } from "./uploads.js";
 
 const MEDIA_TYPES = {
   ".mp4": "video/mp4",
@@ -153,10 +154,20 @@ export function registerMediaRoutes(app, requireAuth) {
     const media = await requireBinding("MEDIA", c.env.MEDIA).get(c.req.param("name"));
     if (!media) return c.notFound();
     const nonce = randomToken();
+    const group = await findGroup(c.env, `/m/${encodeURIComponent(media.name)}`);
+    const logo = group && (await c.env.LOGOS?.get(group.slug));
     c.header("Cache-Control", "no-store");
-    c.header("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`);
+    c.header("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src 'self'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`);
     return c.html(renderMediaPage({
       nonce,
+      createdAt: media.createdAt,
+      back: group
+        ? {
+            href: `/dashboard?open=${group.slug}#project-${group.slug}`,
+            name: group.name,
+            logo: logo ? `/projects/${group.slug}/logo?v=${encodeURIComponent(logo.version)}` : null
+          }
+        : { href: "/dashboard", name: "Uploads" },
       size: media.size,
       contentType: media.contentType,
       filename: media.filename,

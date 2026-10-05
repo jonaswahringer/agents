@@ -3,41 +3,14 @@ import { clientIp } from "./client-ip.js";
 import { randomToken } from "./crypto.js";
 import { isoNow } from "./db.js";
 import { groupUploads, PROJECT_SLUG } from "./projects.js";
+import { escapeHtml, formatSize, ICONS, meta, page, timeAgo } from "./ui.js";
 
 // This index shares the deployment's network access boundary with published
 // documents: whoever can open it can also delete from it. Uploads, logos and
 // API keys keep their own auth.
 export function registerUploadsPage(app) {
   app.get("/dashboard", async (c) => {
-    const result = await c.env.DB.prepare(`
-      SELECT d.id, d.title, d.updated_at, v.version_number, v.file_size
-      FROM drafts d
-      JOIN draft_versions v ON v.id = d.current_version_id
-      WHERE d.deleted_at IS NULL AND d.disabled_at IS NULL
-      ORDER BY d.updated_at DESC
-    `).all();
-    const media = await requireBinding("MEDIA", c.env.MEDIA).list();
-    const uploads = [
-      ...result.results.map((draft) => ({
-        kind: "report",
-        id: draft.id,
-        title: draft.title,
-        path: `/d/${encodeURIComponent(draft.id)}`,
-        detail: `HTML report · Version ${draft.version_number}`,
-        versions: Number(draft.version_number),
-        date: draft.updated_at,
-        size: draft.file_size
-      })),
-      ...media.map((item) => ({
-        kind: "video",
-        id: item.name,
-        title: item.filename,
-        path: `/m/${encodeURIComponent(item.name)}`,
-        detail: "Video",
-        date: item.createdAt,
-        size: item.size
-      }))
-    ];
+    const uploads = await listUploads(c.env);
     const logos = await requireBinding("LOGOS", c.env.LOGOS).list();
     const open = c.req.query("open");
     const nonce = randomToken();
@@ -83,6 +56,43 @@ export function registerUploadsPage(app) {
   });
 }
 
+// Every live report and recording, across accounts, unordered.
+export async function listUploads(env) {
+  const result = await env.DB.prepare(`
+    SELECT d.id, d.title, d.updated_at, v.version_number, v.file_size
+    FROM drafts d
+    JOIN draft_versions v ON v.id = d.current_version_id
+    WHERE d.deleted_at IS NULL AND d.disabled_at IS NULL
+  `).all();
+  const media = await requireBinding("MEDIA", env.MEDIA).list();
+  return [
+    ...result.results.map((draft) => ({
+      kind: "report",
+      id: draft.id,
+      title: draft.title,
+      path: `/d/${encodeURIComponent(draft.id)}`,
+      versions: Number(draft.version_number),
+      date: draft.updated_at,
+      size: draft.file_size
+    })),
+    ...media.map((item) => ({
+      kind: "video",
+      id: item.name,
+      title: item.filename,
+      path: `/m/${encodeURIComponent(item.name)}`,
+      date: item.createdAt,
+      size: item.size
+    }))
+  ];
+}
+
+// The dashboard group an upload belongs to, if it shares one with others.
+export async function findGroup(env, path) {
+  return groupUploads(await listUploads(env)).find(
+    (group) => group.items.length > 1 && group.items.some((item) => item.path === path)
+  ) ?? null;
+}
+
 // Other ports on the same tailnet hostname (dev servers, for one) are other
 // origins that a browser would still let post a form here. Only this page may.
 function sameOrigin(c) {
@@ -102,109 +112,64 @@ function logDeletion(c, what) {
 }
 
 function renderUploads({ uploads, groups, logos, open, nonce }) {
+  const now = Date.now();
   const projects = groups.filter((group) => group.items.length > 1).length;
-  const list = groups
-    .map((group) => (group.items.length > 1 ? renderGroup(group, logos, open) : renderSingle(group, logos)))
+  const reports = uploads.filter((upload) => upload.kind === "report").length;
+  const cards = groups
+    .map((group) => (group.items.length > 1 ? renderGroup(group, logos, open, now) : renderSingle(group, logos, now)))
     .join("");
-  return `<!doctype html>
-<html lang="en"><head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Uploads · Comms</title>
-  <style>
-    :root {
-      color-scheme: light dark; font-family: system-ui, sans-serif; background: #f8fafc; color: #111827;
-      --muted: #475569; --line: #e2e8f0; --surface: #ffffff; --hover: #f1f5f9; --link: #1d4ed8;
-      --danger: #b91c1c; --danger-bg: #fee2e2;
-    }
-    body { margin: 0; }
-    main { max-width: 800px; margin: 48px auto; padding: 0 20px; }
-    h1 { font-size: 36px; margin: 0 0 8px; }
-    .lede { color: var(--muted); line-height: 1.5; margin: 0 0 28px; }
-    ul { list-style: none; margin: 0; padding: 0; }
-    .groups > li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
-    summary, .row { display: flex; align-items: center; gap: 14px; padding: 10px 8px 10px 14px; }
-    summary { cursor: pointer; list-style: none; min-height: 48px; }
-    summary::-webkit-details-marker { display: none; }
-    summary:hover { background: var(--hover); }
-    summary:focus-visible, a:focus-visible, button:focus-visible { outline: 3px solid #2563eb; outline-offset: -3px; }
-    .items li { display: flex; align-items: center; gap: 12px; padding: 6px 8px 6px 14px; border-top: 1px solid var(--line); }
-    .tile { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; overflow: hidden; }
-    .tile img { width: 100%; height: 100%; object-fit: contain; }
-    .tile svg { width: 22px; height: 22px; }
-    .items .tile { width: 30px; height: 30px; border-radius: 8px; }
-    .items .tile svg { width: 17px; height: 17px; }
-    .tile.logo { background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
-    .tile.video { background: #ede9fe; color: #6d28d9; }
-    .tile.research { background: #fef3c7; color: #b45309; }
-    .tile.digest { background: #ccfbf1; color: #0f766e; }
-    .tile.report { background: #dbeafe; color: #1d4ed8; }
-    .tile.project { background: #e2e8f0; color: #334155; }
-    .text { flex: 1; min-width: 0; }
-    .name { display: block; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
-    a { color: var(--link); font-size: 16px; overflow-wrap: anywhere; text-underline-offset: 2px; }
-    .row a { font-size: 17px; }
-    .meta { display: block; margin: 2px 0 0; color: var(--muted); font-size: 14px; line-height: 1.4; }
-    time { white-space: nowrap; }
-    .chevron { flex: none; width: 20px; height: 20px; margin: 0 8px; color: var(--muted); transition: transform .15s ease; }
-    details[open] .chevron { transform: rotate(90deg); }
-    form { flex: none; margin: 0; }
-    .delete { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
-    .delete svg { width: 18px; height: 18px; }
-    .delete:hover { color: var(--danger); background: var(--danger-bg); }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        background: #0f172a; color: #f1f5f9;
-        --muted: #cbd5e1; --line: #334155; --surface: #111c33; --hover: #1e293b; --link: #93c5fd;
-        --danger: #fca5a5; --danger-bg: #450a0a;
-      }
-      .tile.video { background: #2e1065; color: #c4b5fd; }
-      .tile.research { background: #451a03; color: #fcd34d; }
-      .tile.digest { background: #042f2e; color: #5eead4; }
-      .tile.report { background: #172554; color: #93c5fd; }
-      .tile.project { background: #1e293b; color: #cbd5e1; }
-    }
-  </style>
-</head><body><main>
-  <h1>Uploads</h1>
-  <p class="lede">${count(uploads.length, "upload")}${projects ? ` in ${count(projects, "project")}` : ""} · Newest first.</p>
-  ${uploads.length ? `<ul class="groups">${list}</ul>` : "<p>No uploads yet.</p>"}
-</main>
-<script nonce="${nonce}">
-  document.addEventListener("submit", (event) => {
-    if (!confirm(event.target.dataset.confirm)) event.preventDefault();
-  });
-</script>
-</body></html>`;
+  const body = `<main class="wrap">
+    <div class="head">
+      <h1>Uploads</h1>
+      <p class="sub">${count(uploads.length, "upload")}${projects ? ` in ${count(projects, "project")}` : ""}</p>
+    </div>
+    ${uploads.length ? `
+    <div class="toolbar" id="toolbar" hidden>
+      <label class="search">${ICONS.search}<input id="filter" type="search" placeholder="Search uploads" autocomplete="off" aria-label="Search uploads"></label>
+      <div class="segmented" role="group" aria-label="Show">
+        <button type="button" data-show="all" aria-pressed="true">All</button>
+        <button type="button" data-show="report" aria-pressed="false">Reports <span>${reports}</span></button>
+        <button type="button" data-show="video" aria-pressed="false">Videos <span>${uploads.length - reports}</span></button>
+      </div>
+    </div>
+    <ul class="cards">${cards}</ul>
+    <p class="empty" id="no-match" hidden>No uploads match.</p>` : `
+    <div class="empty-state">${ICONS.project}<p>No uploads yet.</p><p class="sub">Publish a report or video and it appears here.</p></div>`}
+  </main>`;
+  return page({ title: "Uploads · Comms", body, styles: DASHBOARD_STYLES, nonce, script: DASHBOARD_SCRIPT });
 }
 
-function renderGroup(group, logos, open) {
+function renderGroup(group, logos, open, now) {
   const reports = group.items.filter((item) => item.kind === "report").length;
   const videos = group.items.length - reports;
-  const counts = [reports && count(reports, "report"), videos && count(videos, "video")].filter(Boolean).join(" · ");
+  const counts = [reports && count(reports, "report"), videos && count(videos, "video")].filter(Boolean);
   const id = group.slug ? ` id="project-${group.slug}"` : "";
-  return `<li><details${id}${group.slug && group.slug === open ? " open" : ""}>
-    <summary>
+  return `<li class="card" data-name="${escapeHtml(group.name.toLowerCase())}"><details${id}${group.slug && group.slug === open ? " open" : ""}>
+    <summary class="row">
       ${groupTile(group, logos)}
-      <span class="text"><span class="name">${escapeHtml(group.name)}</span>
-      <span class="meta">${counts} · Updated ${timestamp(group.latest)}</span></span>
-      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+      <span class="text"><span class="title">${escapeHtml(group.name)}</span>
+      ${meta([...counts, `Updated ${timeAgo(group.latest, now)}`])}</span>
+      ${ICONS.chevron}
     </summary>
-    <ul class="items">${group.items.map((item) => `<li>
-      <span class="tile ${itemIcon(item)}">${ICONS[itemIcon(item)]}</span>
-      ${itemText(item)}
+    <ul class="items">${group.items.map((item) => `<li class="row item" ${itemData(item)}>
+      <span class="tile ${itemIcon(item)}" role="img" aria-label="${KIND_NAMES[itemIcon(item)]}">${ICONS[itemIcon(item)]}</span>
+      ${itemText(item, now)}
       ${deleteForm(item, group.slug)}
     </li>`).join("")}</ul>
   </details></li>`;
 }
 
-function renderSingle(group, logos) {
+function renderSingle(group, logos, now) {
   const [item] = group.items;
-  return `<li><div class="row">
+  return `<li class="card row single" data-name="" ${itemData(item)}>
     ${groupTile(group, logos)}
-    ${itemText(item)}
+    ${itemText(item, now)}
     ${deleteForm(item, null)}
-  </div></li>`;
+  </li>`;
+}
+
+function itemData(item) {
+  return `data-kind="${item.kind}" data-title="${escapeHtml(item.title.toLowerCase())}"`;
 }
 
 function groupTile(group, logos) {
@@ -214,13 +179,13 @@ function groupTile(group, logos) {
   }
   const icons = new Set(group.items.map(itemIcon));
   const icon = icons.size === 1 ? [...icons][0] : "project";
-  return `<span class="tile ${icon}">${ICONS[icon]}</span>`;
+  return `<span class="tile ${icon}" role="img" aria-label="${KIND_NAMES[icon]}">${ICONS[icon]}</span>`;
 }
 
-function itemText(item) {
+function itemText(item, now) {
   return `<span class="text">
-    <a href="${escapeHtml(item.path)}">${escapeHtml(item.title)}</a>
-    <span class="meta">${escapeHtml(item.detail)} · ${formatSize(item.size)}${item.date ? ` · ${timestamp(item.date)}` : ""}</span>
+    <a class="title cover" href="${escapeHtml(item.path)}">${escapeHtml(item.title)}</a>
+    ${meta([item.kind === "report" && `Version ${item.versions}`, formatSize(item.size), item.date && timeAgo(item.date, now)])}
   </span>`;
 }
 
@@ -230,8 +195,8 @@ function deleteForm(item, slug) {
     item.kind === "report"
       ? `Delete “${item.title}”${item.versions > 1 ? ` and all ${item.versions} versions` : ""}? Its link will stop working.`
       : `Delete “${item.title}”? The video file is removed and cannot be restored.`;
-  return `<form method="post" action="${escapeHtml(action)}" data-confirm="${escapeHtml(message)}">
-    <button class="delete" type="submit" title="Delete" aria-label="Delete ${escapeHtml(item.title)}">${ICONS.trash}</button>
+  return `<form class="delete" method="post" action="${escapeHtml(action)}" data-confirm="${escapeHtml(message)}">
+    <button type="submit" title="Delete" aria-label="Delete ${escapeHtml(item.title)}">${ICONS.trash}</button>
   </form>`;
 }
 
@@ -242,37 +207,109 @@ function itemIcon(item) {
   return "report";
 }
 
-const svg = (paths) =>
-  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
-
-const ICONS = {
-  video: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z"/>'),
-  research: svg('<circle cx="11" cy="11" r="6"/><path d="m20 20-4.5-4.5"/>'),
-  digest: svg('<path d="M5 4h11a2 2 0 0 1 2 2v13a1 1 0 0 0 2 0V9"/><path d="M5 4v14a2 2 0 0 0 2 2h13"/><path d="M8 8h6M8 12h6M8 16h4"/>'),
-  report: svg('<path d="M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v5h5M9 13h6M9 17h6"/>'),
-  project: svg('<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'),
-  trash: svg('<path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/>')
-};
+const KIND_NAMES = { video: "Video", research: "Research report", digest: "Digest", report: "Report", project: "Project" };
 
 function count(value, noun) {
   return `${value} ${value === 1 ? noun : `${noun}s`}`;
 }
 
-function timestamp(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const iso = date.toISOString();
-  return `<time datetime="${iso}">${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC</time>`;
-}
+const DASHBOARD_STYLES = `
+  .head { margin-bottom: 20px; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+  .search { flex: 1 1 240px; display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 11px; color: var(--subtle); }
+  .search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search svg { width: 18px; height: 18px; flex: none; }
+  .search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; color: var(--text); font-size: 16px; }
+  .search input::placeholder { color: var(--subtle); }
+  .segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--sunken); border: 1px solid var(--border); border-radius: 11px; }
+  .segmented button { height: 34px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--muted); font-size: 14px; font-weight: 550; cursor: pointer; }
+  .segmented button span { color: var(--subtle); font-weight: 500; margin-left: 2px; }
+  .segmented button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow), 0 0 0 1px var(--border); }
 
-function formatSize(value) {
-  const bytes = Number(value) || 0;
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
+  .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+  .row { position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 10px 12px 14px; min-height: 68px; }
+  .row:hover { background: var(--hover); }
+  .text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .title { font-weight: 600; font-size: 15.5px; letter-spacing: -.01em; overflow-wrap: anywhere; }
+  .cover::after { content: ""; position: absolute; inset: 0; }
+  .cover:focus-visible { outline: none; }
+  .cover:focus-visible::after { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: inherit; }
+  summary { list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+  .chevron { flex: none; width: 18px; height: 18px; margin: 0 8px; color: var(--subtle); transition: transform .2s ease; }
+  details[open] .chevron { transform: rotate(90deg); }
+  details[open] > summary { border-bottom: 1px solid var(--border); }
 
-function escapeHtml(value) {
-  return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
+  .items { list-style: none; margin: 0; padding: 4px 0; background: color-mix(in srgb, var(--surface) 60%, var(--bg)); }
+  .item { min-height: 58px; padding: 8px 10px 8px 22px; }
+  .item + .item::before { content: ""; position: absolute; top: 0; left: 66px; right: 12px; border-top: 1px solid var(--border); }
+  .item .tile { width: 32px; height: 32px; border-radius: 9px; }
+  .item .tile svg { width: 17px; height: 17px; }
+  .item .title { font-weight: 520; font-size: 14.5px; }
+
+  .delete { flex: none; position: relative; z-index: 1; margin: 0; }
+  .delete button { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 10px;
+    background: none; color: var(--subtle); cursor: pointer; transition: opacity .15s, background .15s, color .15s; }
+  .delete svg { width: 18px; height: 18px; }
+  .delete button:hover { color: var(--danger); background: var(--danger-soft); }
+  @media (hover: hover) {
+    .row .delete button { opacity: 0; }
+    .row:hover .delete button, .delete button:focus-visible { opacity: 1; }
+  }
+  .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+  .empty-state { text-align: center; padding: 72px 20px; color: var(--muted); }
+  .empty-state svg { width: 40px; height: 40px; color: var(--subtle); }
+  .empty-state p { margin: 10px 0 0; color: var(--text); font-weight: 600; }
+  .empty-state .sub { font-weight: 400; color: var(--muted); }
+  @media (max-width: 520px) {
+    h1 { font-size: 26px; }
+    .wrap { padding-top: 20px; }
+    .segmented { width: 100%; }
+    .segmented button { flex: 1; }
+  }
+`;
+
+// Confirms deletes, and filters by text and kind. Without script the list is
+// complete and deletes go through unconfirmed, so the toolbar starts hidden.
+const DASHBOARD_SCRIPT = `
+  document.addEventListener("submit", (event) => {
+    if (!confirm(event.target.dataset.confirm)) event.preventDefault();
+  });
+  const toolbar = document.getElementById("toolbar");
+  if (toolbar) {
+    toolbar.hidden = false;
+    const input = document.getElementById("filter");
+    const buttons = [...toolbar.querySelectorAll("[data-show]")];
+    let show = "all";
+    const apply = () => {
+      const query = input.value.trim().toLowerCase();
+      let total = 0;
+      for (const card of document.querySelectorAll(".cards > .card")) {
+        const named = query && card.dataset.name.includes(query);
+        const rows = card.matches("[data-title]") ? [card] : [...card.querySelectorAll("[data-title]")];
+        let shown = 0;
+        for (const row of rows) {
+          const match = (show === "all" || row.dataset.kind === show) && (!query || named || row.dataset.title.includes(query));
+          if (row !== card) row.hidden = !match;
+          if (match) shown++;
+        }
+        card.hidden = !shown;
+        total += shown;
+        const details = card.querySelector("details");
+        if (details && query && shown) details.open = true;
+      }
+      document.getElementById("no-match").hidden = total > 0;
+    };
+    input.addEventListener("input", apply);
+    for (const button of buttons) {
+      button.addEventListener("click", () => {
+        show = button.dataset.show;
+        for (const other of buttons) other.setAttribute("aria-pressed", String(other === button));
+        apply();
+      });
+    }
+  }
+`;

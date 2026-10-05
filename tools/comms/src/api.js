@@ -20,6 +20,7 @@ import { deleteHtmlObject, getHtmlObject, putHtmlObject } from "./storage.js";
 import { registerWebRoutes } from "./web.js";
 import { registerMediaRoutes } from "./media.js";
 import { registerProjectRoutes } from "./projects.js";
+import { FAVICON_SVG } from "./ui.js";
 
 const encoder = new TextEncoder();
 
@@ -33,6 +34,11 @@ export function createApp() {
   });
 
   app.get("/favicon.ico", (c) => c.env.ASSETS.fetch(c.req.raw));
+  app.get("/favicon.svg", () =>
+    new Response(FAVICON_SVG, {
+      headers: { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff" }
+    })
+  );
 
   app.get("/", (c) => c.redirect("/dashboard"));
 

@@ -153,7 +153,7 @@ test("a project's reports and videos share one collapsed group named by its repo
   const group = sliceOf(html, "project-smart-reminder");
   expect(group).not.toContain(" open>");
   expect(group).toContain("Smart Reminder</span>");
-  expect(group).toContain("1 report · 2 videos · Updated <time datetime=\"2026-10-05T12:00:00.000Z\">");
+  expect(group).toContain('<span>1 report</span><span>2 videos</span><span>Updated <time datetime="2026-10-05T12:00:00.000Z" title="2026-10-05 12:00 UTC">');
   // Newest first inside the group.
   const order = [`/m/${wide.name}`, `/m/${square.name}`, `/d/${launch.draftId}`].map((path) => group.indexOf(path));
   expect(order.every((position) => position > -1)).toBe(true);
@@ -178,7 +178,9 @@ test("rows without a logo get an icon for what they are", async () => {
   await report("Payments migration");
   await video("MP4 playback test.mp4");
   const html = await (await call("/dashboard")).text();
-  for (const kind of ["research", "digest", "report", "video"]) expect(html).toContain(`<span class="tile ${kind}">`);
+  for (const [kind, name] of [["research", "Research report"], ["digest", "Digest"], ["report", "Report"], ["video", "Video"]]) {
+    expect(html).toContain(`<span class="tile ${kind}" role="img" aria-label="${name}">`);
+  }
   expect(html).not.toContain('class="tile project"');
 });
 
