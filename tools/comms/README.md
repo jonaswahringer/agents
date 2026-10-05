@@ -33,14 +33,27 @@ the HTML upload tool. It was called `postplan-local` before it moved into this r
   served by this host. It does not allow video from other hosts or ports.
 - **Recording pages buffer before playback.** The page requests automatic
   preloading and shows the continuously playable portion of the video as a
-  percentage. Play and native controls unlock at 30% buffered. Downloading
+  percentage. Play and native controls unlock at 30% buffered, or sooner when
+  the browser stops preloading with enough to start, as desktop Chrome does for
+  a paused video. Downloading
   continues during playback; slow connections can still run out of buffered
   video. “Download fully before playing” instead fetches the entire file with
   byte-based progress, then plays the completed local copy. Safari may limit
   automatic preloading until a user gesture; use the full-download button if
   it stops short of 30%. Failed downloads can be retried. Leaving the page
-  cancels the transfer and releases the local copy. These controls apply to
+  cancels a transfer that is still running. These controls apply to
   `/m/` recording pages; embedded videos in uploaded reports keep their own player.
+- **A browser keeps a recording for an hour.** `/media/` answers with
+  `Cache-Control: private, max-age=3600`, so streamed bytes stay in the
+  browser's HTTP cache, and after the hour an `If-None-Match` check costs a 304
+  instead of the file. A full download is also kept in the page's Cache Storage
+  and plays straight from it when the recording is opened again within the hour;
+  older copies are removed the next time any recording page opens. Chrome reuses
+  both: after leaving for the uploads page and coming back, it sent no video
+  bytes. Safari may not keep streamed video in its HTTP cache, so on an iPhone
+  rely on the full download. A generated media name never gets new bytes, so a
+  cached copy cannot go stale, but a deleted recording can keep playing for up
+  to an hour on a device that had it.
 
 So a document is checked twice. `src/html-policy.js` rejects, at upload time:
 external scripts (`<script src>` and the SVG spelling `<script href>`), forms,

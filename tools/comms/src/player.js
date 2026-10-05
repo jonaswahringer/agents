@@ -7,9 +7,17 @@ export function initializePlayer() {
   const full = document.getElementById("player-full");
   const source = video.dataset.src;
   const expected = Number(video.dataset.size);
+  // A full download stays in this browser's Cache Storage for an hour, so
+  // coming back to the recording plays it without downloading it again.
+  const SAVED = "comms-recordings", KEEP = 60 * 60 * 1000;
   let mode = "stream", controller, timer, objectUrl, generation = 0, hidden = false;
-  let unlocked = false;
+  let unlocked = false, keptUntil = null;
 
+  function downloadedText() {
+    return keptUntil
+      ? `Fully downloaded and kept on this device until ${clock(keptUntil)}. Tap Play to watch.`
+      : "Fully downloaded. Tap Play to watch.";
+  }
   function lock() { video.controls = false; play.disabled = true; unlocked = false; }
   function available(text) {
     unlocked = true; video.controls = true; play.disabled = false;
@@ -30,6 +38,10 @@ export function initializePlayer() {
     const percent = Math.floor(fraction * 100);
     if (fraction >= .3 && video.readyState >= 3) {
       available(`${percent}% buffered. You can play now, or wait for 100%.`);
+    } else if (video.networkState === 1 && video.readyState >= 3) {
+      // NETWORK_IDLE: the browser stopped preloading on its own (desktop Chrome
+      // does short of 30% for a paused video) and has enough to start.
+      available(`${percent}% buffered. The browser loads the rest while playing. You can play now.`);
     } else if (!unlocked) {
       message.textContent = `${percent}% buffered. Playback unlocks at 30%. You can also download fully.`;
     }
@@ -38,7 +50,7 @@ export function initializePlayer() {
     lock(); message.textContent = text; retry.hidden = false; full.disabled = false;
   }
   function cancel() {
-    generation++;
+    generation++; keptUntil = null;
     clearTimeout(timer); controller?.abort(); controller = null;
     video.pause(); video.removeAttribute("src"); video.load();
     if (objectUrl) URL.revokeObjectURL(objectUrl);
@@ -50,6 +62,53 @@ export function initializePlayer() {
     progress.max = 100; progress.value = 0; progress.hidden = false;
     message.textContent = "Buffering video. Playback unlocks at 30%, or choose Download fully.";
     video.preload = "auto"; video.src = source; video.load();
+  }
+  function clock(time) {
+    return new Date(time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  // Removes copies older than an hour and returns this recording's, if any.
+  async function savedCopy() {
+    const cache = await caches.open(SAVED);
+    let found = null;
+    for (const request of await cache.keys()) {
+      const response = await cache.match(request);
+      const savedAt = Number(response?.headers.get("x-comms-saved-at"));
+      if (!(Date.now() - savedAt < KEEP)) await cache.delete(request);
+      else if (request.url.endsWith(source)) found = { response, until: savedAt + KEEP };
+    }
+    if (!found) return null;
+    const blob = await found.response.blob();
+    if (blob.size !== expected || !blob.size) { await cache.delete(source); return null; }
+    return { blob, until: found.until };
+  }
+  // Best effort: without storage the download still plays, it just is not kept.
+  async function saveCopy(blob) {
+    if (typeof caches === "undefined") return null;
+    try {
+      const savedAt = Date.now();
+      await (await caches.open(SAVED)).put(source, new Response(blob, {
+        headers: { "content-type": blob.type, "x-comms-saved-at": String(savedAt) }
+      }));
+      return savedAt + KEEP;
+    } catch { return null; }
+  }
+  function playSaved({ blob, until }) {
+    mode = "reset"; cancel(); mode = "downloaded"; lock();
+    keptUntil = until;
+    retry.hidden = true; full.disabled = true;
+    progress.max = 100; progress.value = 100; progress.hidden = false;
+    message.textContent = `Saved on this device until ${clock(until)}. Preparing playback…`;
+    objectUrl = URL.createObjectURL(blob);
+    video.src = objectUrl; video.load();
+  }
+  function start() {
+    if (typeof caches === "undefined") return startStream();
+    const run = generation;
+    message.textContent = "Checking for a copy saved on this device…";
+    savedCopy().then(
+      (saved) => { if (run === generation) saved ? playSaved(saved) : startStream(); },
+      () => { if (run === generation) startStream(); }
+    );
   }
   async function downloadFully() {
     mode = "reset"; cancel(); mode = "download"; lock();
@@ -66,7 +125,7 @@ export function initializePlayer() {
     };
     watchdog();
     try {
-      const response = await fetch(source, { signal, cache: "no-store" });
+      const response = await fetch(source, { signal });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const reader = response.body.getReader(), chunks = [];
       let received = 0;
@@ -82,10 +141,15 @@ export function initializePlayer() {
       }
       if (received !== expected || !received) throw new Error("Incomplete download");
       clearTimeout(timer);
-      objectUrl = URL.createObjectURL(new Blob(chunks, { type: video.dataset.type }));
+      const blob = new Blob(chunks, { type: video.dataset.type });
+      objectUrl = URL.createObjectURL(blob);
       mode = "downloaded";
       message.textContent = "100% downloaded. Preparing playback…";
       video.src = objectUrl; video.load();
+      const until = await saveCopy(blob);
+      if (run !== generation) return;
+      keptUntil = until;
+      if (unlocked && video.paused) message.textContent = downloadedText();
     } catch (error) {
       if (run !== generation) return;
       mode = "failed";
@@ -98,7 +162,7 @@ export function initializePlayer() {
   for (const event of ["progress", "loadedmetadata", "loadeddata", "canplay", "suspend"]) {
     video.addEventListener(event, () => {
       if (mode === "downloaded" && video.readyState >= 3) {
-        available("Fully downloaded. Tap Play to watch.");
+        available(downloadedText());
       } else updateBuffer();
     });
   }
@@ -118,6 +182,6 @@ export function initializePlayer() {
   full.addEventListener("click", downloadFully);
   retry.addEventListener("click", downloadFully);
   window.addEventListener("pagehide", () => { hidden = true; mode = "reset"; cancel(); lock(); });
-  window.addEventListener("pageshow", () => { if (hidden) { hidden = false; startStream(); } });
-  startStream();
+  window.addEventListener("pageshow", () => { if (hidden) { hidden = false; start(); } });
+  start();
 }

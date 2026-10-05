@@ -13,6 +13,11 @@ const MEDIA_TYPES = {
   ".mov": "video/quicktime"
 };
 const STORED_NAME = /^[a-f0-9]{32}\.(mp4|m4v|webm|mov)$/;
+// A recording's bytes never change under its generated name, so a browser may
+// keep what it has buffered for an hour and replay it without the network.
+// A deleted recording can therefore still play for up to an hour on a device
+// that had it.
+const MEDIA_CACHE_CONTROL = "private, max-age=3600";
 
 // Media has its own directory. Requests can only address generated filenames,
 // never arbitrary paths on the host. Uploads stream into a temporary file and
@@ -169,7 +174,7 @@ export function registerMediaRoutes(app, requireAuth) {
       "Content-Length": String(media.size),
       "Accept-Ranges": "bytes",
       "ETag": etag,
-      "Cache-Control": "no-store",
+      "Cache-Control": MEDIA_CACHE_CONTROL,
       "X-Content-Type-Options": "nosniff"
     });
     if (c.req.query("download") === "1") {
@@ -178,6 +183,11 @@ export function registerMediaRoutes(app, requireAuth) {
       headers.set("Content-Disposition", `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`);
     }
     if (c.req.method === "HEAD") return new Response(null, { headers });
+    const ifNoneMatch = c.req.header("if-none-match");
+    if (ifNoneMatch && ifNoneMatch.split(",").some((tag) => [etag, "*"].includes(tag.trim()))) {
+      headers.delete("Content-Length");
+      return new Response(null, { status: 304, headers });
+    }
 
     const rangeHeader = c.req.header("range");
     const ifRange = c.req.header("if-range");

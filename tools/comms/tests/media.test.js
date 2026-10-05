@@ -110,6 +110,23 @@ test("video seeking returns the requested bytes and correct lengths", async () =
   expect(await changed.text()).toBe("0123456789abcdefghij");
 });
 
+test("browsers may keep a recording for an hour and revalidate it without the bytes", async () => {
+  const { mediaUrl } = await (await upload()).json();
+  const full = await call(mediaUrl);
+  const ranged = await call(mediaUrl, { headers: { range: "bytes=0-3" } });
+  for (const response of [full, ranged]) expect(response.headers.get("cache-control")).toBe("private, max-age=3600");
+  const etag = full.headers.get("etag");
+  for (const ifNoneMatch of [etag, `"other", ${etag}`, "*"]) {
+    const revalidated = await call(mediaUrl, { headers: { "if-none-match": ifNoneMatch, range: "bytes=0-3" } });
+    expect(revalidated.status).toBe(304);
+    expect(revalidated.headers.get("etag")).toBe(etag);
+    expect(await revalidated.text()).toBe("");
+  }
+  const stale = await call(mediaUrl, { headers: { "if-none-match": '"other"' } });
+  expect(stale.status).toBe(200);
+  expect(await stale.text()).toBe("0123456789abcdefghij");
+});
+
 test("an uploaded HTML report can embed the recording and link to its download", async () => {
   const { mediaId } = await (await upload()).json();
   const html = `<!doctype html><title>Recorded walkthrough</title><video controls src="/media/${mediaId}"></video><a href="/media/${mediaId}?download=1" download>Download</a>`;
