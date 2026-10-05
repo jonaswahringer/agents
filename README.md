@@ -9,7 +9,7 @@ the agent configuration, selected skills, and local commands.
 | --- | --- | --- |
 | `agents` | Installs and updates shared instructions, skills, and commands. | `agents update`, `agents skills`, `agents doctor` |
 | [usage](docs/usage.md) | Shows remaining Claude Code, Codex, and Cursor allowance and reset times. | `usage`, `usage live`, `usage --json` |
-| [Furnace](tools/furnace/README.md) | Saves ideas and tracks agent work, checks, PRs, and next actions. | `furnace add "Idea"`, `furnace list`, `furnace report` |
+| [furnace](tools/furnace/README.md) | Saves ideas and tracks agent work, checks, PRs, and next actions. | `furnace add "Idea"`, `furnace list`, `furnace report` |
 | [comms](tools/comms/README.md) | Publishes HTML reports and recordings to URLs reachable over the tailnet. | Postplan CLI for HTML; `bun run publish-media` in `tools/comms` for recordings |
 | [workflows](tools/workflows/README.md) | Runs recurring jobs, including the T3 update digest and ready Furnace tasks. | `python3 tools/workflows/workflows.py` |
 | [auto-resume](tools/auto-resume/README.md) | Continues an explicitly armed session after subscription quota returns. | `tools/auto-resume/auto-resume` |
