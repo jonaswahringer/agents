@@ -152,7 +152,9 @@ frame. Check typography, product readability at the intended viewing size,
 cropping, brand fidelity, timing, and blank or clipped frames. Fix observed defects
 and repeat the affected checks.
 
-Export the MP4 to `renders/video.mp4`. Verify the exported file with a media probe
+Export the MP4 to `renders/<product>-promo.mp4`, with `<product>` as a lowercase
+slug such as `smart-reminder`. Add `-v<N>` for a revision and `-wide`, `-square`
+or `-vertical` for an alternate format. Verify the exported file with a media probe
 such as `ffprobe`, not just project configuration. Confirm resolution, actual frame
 rate, duration within one frame of the target, codec, and the absence of an audio
 stream for a silent cut. A default 15-second cut at 60 fps should contain 900 frames.
@@ -178,7 +180,15 @@ Use its existing configured service and saved Postplan credentials. From
 the repository's `tools/comms` directory, run:
 
 ```sh
-bun run publish-media "/absolute/path/to/project/marketing/product-promo/renders/video.mp4"
+bun run publish-media "/absolute/path/to/project/marketing/product-promo/renders/product-promo.mp4"
+```
+
+The comms dashboard groups uploads by the product name at the start of the
+filename, so keep that name. If the group has no logo yet (`/projects/<product>/logo`
+answers 404), publish the brand mark the video uses, preferring a square one:
+
+```sh
+bun run publish-logo <product> "/absolute/path/to/brand-mark.svg"
 ```
 
 The uploader also accepts `POSTPLAN_API_URL` and `POSTPLAN_API_KEY`. Never print

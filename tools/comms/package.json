@@ -9,7 +9,8 @@
     "dev": "bun --watch server.js",
     "migrate": "bun run scripts/migrate.js",
     "test": "bun test",
-    "publish-media": "bun run scripts/publish-media.js"
+    "publish-media": "bun run scripts/publish-media.js",
+    "publish-logo": "bun run scripts/publish-logo.js"
   },
   "dependencies": {
     "hono": "^4.13.3",

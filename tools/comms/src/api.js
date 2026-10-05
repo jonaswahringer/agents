@@ -19,6 +19,7 @@ import { renderNotFound } from "./render.js";
 import { deleteHtmlObject, getHtmlObject, putHtmlObject } from "./storage.js";
 import { registerWebRoutes } from "./web.js";
 import { registerMediaRoutes } from "./media.js";
+import { registerProjectRoutes } from "./projects.js";
 
 const encoder = new TextEncoder();
 
@@ -230,6 +231,7 @@ export function createApp() {
 
   registerWebRoutes(app);
   registerMediaRoutes(app, requireAuth);
+  registerProjectRoutes(app, requireAuth);
   registerMediaDiagnostics(app);
 
   app.get("/d/:draftId", serveDraft);

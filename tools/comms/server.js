@@ -5,6 +5,7 @@ import { createApp } from "./src/api.js";
 import { FileBucket, noAssets, SqliteD1 } from "./src/adapters.js";
 import { deleteExpiredRateLimits } from "./src/rate-limit.js";
 import { MediaFiles } from "./src/media.js";
+import { ProjectLogos } from "./src/projects.js";
 import { getConfig } from "./src/config.js";
 
 // launchd writes stdout and stderr straight to the log with nothing added, so
@@ -43,7 +44,8 @@ const env = {
   ASSETS: noAssets,
   DB: db,
   DRAFTS: new FileBucket(`${dataDir}/drafts`),
-  MEDIA: new MediaFiles(`${dataDir}/media`)
+  MEDIA: new MediaFiles(`${dataDir}/media`),
+  LOGOS: new ProjectLogos(`${dataDir}/projects`)
 };
 
 const app = createApp();
