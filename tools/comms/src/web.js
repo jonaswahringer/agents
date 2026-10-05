@@ -1,9 +1,10 @@
+import { registerUploadsPage } from "./uploads.js";
 import { getConfig } from "./config.js";
 import { clientIp } from "./client-ip.js";
 import { findOrCreateAccountForIdentity, isoNow } from "./db.js";
 import { randomToken, sha256 } from "./crypto.js";
 import { newInternalId } from "./ids.js";
-import { getAccountDraftWithVersions, listAccountDrafts } from "./drafts.js";
+import { getAccountDraftWithVersions } from "./drafts.js";
 import { getHomeUrl, getRequestBaseUrl } from "./public-url.js";
 import { consumeRateLimit } from "./rate-limit.js";
 import { buildAuthorizeUrl, buildPkce, exchangeCode, verifyIdToken } from "./shoo.js";
@@ -19,12 +20,12 @@ import {
   renderAuthError,
   renderApiKey,
   renderApiKeys,
-  renderDashboard,
   renderDraftDetail,
   renderSignIn
 } from "./render-web.js";
 
 export function registerWebRoutes(app) {
+  registerUploadsPage(app);
   app.get("/auth/sign-in", requireConfigured, async (c) => {
     const config = getConfig(c.env);
     const { verifier, challenge, state } = await buildPkce();
@@ -121,18 +122,6 @@ export function registerWebRoutes(app) {
   app.post("/auth/sign-out", (c) => {
     appendCookie(c, clearSessionCookie({ secure: isSecure(c.req.raw) }));
     return c.redirect("/");
-  });
-
-  app.get("/dashboard", requireConfigured, async (c) => {
-    const config = getConfig(c.env);
-    const session = await readSession(c.req.raw, config.sessionSecret);
-    if (!session) return c.html(renderSignIn({ next: "/dashboard" }));
-
-    const drafts = await listAccountDrafts(c.env.DB, session.accountId, {
-      publicBaseUrl: config.publicBaseUrl,
-      requestBaseUrl: getRequestBaseUrl(c.req.raw)
-    });
-    return c.html(renderDashboard({ session, drafts }));
   });
 
   app.get("/dashboard/drafts/:draftId", requireConfigured, async (c) => {

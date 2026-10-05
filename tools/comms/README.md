@@ -87,7 +87,84 @@ migrations have run, rather than failing on the first request.
 | `UPLOAD_BODY_LIMIT` | `2mb` | Size cap on the whole JSON request. |
 | `UPLOAD_IP_RATE_LIMIT_MAX` | `60` per minute | Uploads per client IP, counted before authentication. Over the tailnet the IP is the peer address from `X-Forwarded-For`, which Tailscale Serve sets and does not let a client override. When that header is present nothing else is consulted, so `CF-Connecting-IP` and `X-Real-IP` cannot be used to forge it. |
 | `UPLOAD_RATE_LIMIT_MAX` | `30` per minute | Uploads per API key. |
-| `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/dashboard` and `/settings/api-keys` answer 503. The API is unaffected. |
+| `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/settings/api-keys` answers 503. The uploads dashboard needs no browser sign-in. The API is unaffected. |
+
+- **Recording pages buffer before playback.** The page requests automatic
+  preloading and shows the continuously playable portion of the video as a
+  percentage. Play and native controls unlock at 30% buffered. Downloading
+  continues during playback; slow connections can still run out of buffered
+  video. “Download fully before playing” instead fetches the entire file with
+  byte-based progress, then plays the completed local copy. Safari may limit
+  automatic preloading until a user gesture; use the full-download button if
+  it stops short of 30%. Failed downloads can be retried. Leaving the page
+  cancels the transfer and releases the local copy. These controls apply to
+  `/m/` recording pages; embedded videos in uploaded reports keep their own player.
+
+## Browse uploads
+
+Open [Comms](https://minj.tail794979.ts.net:8774/) or `/dashboard` to browse
+HTML reports and videos across all accounts. No browser login is needed: access
+is controlled by the deployment's Tailscale policy. Deleted and disabled reports
+are omitted.
+
+Uploads from the same project share one row that expands when tapped; an upload
+with no siblings stays a row of its own. Groups are ordered by their newest
+upload, and items inside a group are newest first. `/dashboard?open=<project>`
+opens with that group expanded.
+
+Uploads carry no project field, so the project is read from names:
+
+- A report title names it before ` · `, ` — `, ` – `, ` | `, ` - ` or `: `.
+  "Smart Reminder · launch video v13" belongs to `smart-reminder`.
+- A video filename names it once trailing version, format and generic words are
+  removed: `v13`, `33s`, `60fps`, `1080p`, `wide`, `square`, `vertical`, `web`,
+  `final`, `promo`, `launch`, `demo` and the like.
+  `smart-reminder-launch-v13-wide.mp4` belongs to `smart-reminder` too.
+
+So name a project's files after it, and title its reports `<Project> · <topic>`.
+A group is named by its newest report title, or else by its slug in title case.
+
+A group shows its project's logo when one has been published (see below).
+Otherwise each row gets a generic icon: video, research (a title with
+"research", "findings", "analysis" and the like), digest ("digest",
+"changelog", "weekly"…), report, or a folder for a mixed group.
+
+### Delete from the dashboard
+
+Every row has a delete button that asks for confirmation first. Deleting a
+report takes down every version, exactly as `DELETE /api/drafts/<id>` does: the
+row is marked deleted and its links answer 404, but the version files stay on
+disk. Deleting a video removes the file and its metadata, and cannot be undone.
+
+This needs no API key. Anyone who can open the dashboard can delete from it, so
+the Tailscale grant on 8774 is the only gate; keep it to people you would hand
+the key to. Two checks stop other pages from doing it on a reader's behalf. The
+delete request must come from the dashboard's own origin, which rules out
+sites on other ports of the same tailnet hostname (the dev pool on 8800 and up,
+for example). And the dashboard sends `Cross-Origin-Opener-Policy: same-origin`,
+so a published report cannot open it in a window and press its buttons.
+Each dashboard delete is logged, with the client address, to the service log.
+
+Uploads, logos and API-key operations keep their API-key requirement.
+
+### Publish a project logo
+
+From `tools/comms`, with the same saved credentials as the other publish
+commands:
+
+```sh
+bun run publish-logo smart-reminder /path/to/icon.svg
+```
+
+The project is the lowercase slug the dashboard shows in `?open=`. SVG, PNG,
+JPEG and WebP are accepted up to 256 KB; the type is read from the file, not its
+name. Publishing again replaces the logo. A square mark reads better than a
+wordmark in the 40 px tile.
+
+The API is `PUT /api/projects/<project>/logo` with the image as a raw body, and
+`DELETE /api/projects/<project>/logo` to remove it. `GET /projects/<project>/logo`
+serves it to anyone who can reach the service. An SVG opened there directly runs
+under a sandboxing CSP, so it cannot run script.
 
 ## Publish a document
 
@@ -151,7 +228,7 @@ The command also accepts `POSTPLAN_API_URL` and `POSTPLAN_API_KEY`. It prints:
 - `mediaId`: the generated filename, for deletion through the API.
 
 Each upload creates a new recording and link. There is no recording version
-history or dashboard listing. To put it in a report, use the media URL returned
+history. Recordings appear alongside HTML reports on `/dashboard`. To put it in a report, use the media URL returned
 by the upload, or its path when the report is hosted on the same service:
 
 ```html
@@ -265,6 +342,7 @@ drafts/.r2-meta/drafts/<draft-id>/versions/<id>.html.json   the content type R2 
 comms.log                                              service output
 media/<mediaId>                                        recording bytes
 media/<mediaId>.json                                   filename, type, size and owning account
+projects/<project>.<svg|png|jpg|webp>                  project logos for the dashboard
 ```
 
 The doubled `drafts/` is not a typo: `drafts` is the bucket directory, and the
@@ -280,6 +358,7 @@ directory, or back it up live with SQLite's own backup:
 sqlite3 ~/.local/share/comms/postplan.sqlite ".backup /path/to/comms-backup.sqlite"
 cp -R ~/.local/share/comms/drafts /path/to/drafts-backup
 cp -R ~/.local/share/comms/media /path/to/media-backup
+cp -R ~/.local/share/comms/projects /path/to/projects-backup
 ```
 
 The API key lives in `.env` and inside the installed plist, both `chmod 600` and
@@ -300,3 +379,12 @@ to `bind()`. The pieces `src/` uses are covered by `tests/adapters.test.js`.
 ## Licence
 
 MIT, inherited from upstream. See `LICENSE`.
+
+## Diagnose playback on a device
+
+Open `/diagnostics/media/<mediaId>` for an existing recording. The page can
+compare streamed playback with playback from a fully downloaded copy. It records
+response-header timing, download duration and video events in a copyable text box.
+Measurements stay in the browser; there is no telemetry endpoint or stored log.
+A download starts only when requested and times out after 60 seconds. Use a small
+recording first on cellular connections.

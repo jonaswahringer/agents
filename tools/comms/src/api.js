@@ -1,3 +1,4 @@
+import { registerMediaDiagnostics } from "./media-diagnostics.js";
 import { Hono } from "hono";
 import { clientIp, requestId } from "./client-ip.js";
 import { getConfig, requireBinding } from "./config.js";
@@ -12,12 +13,13 @@ import {
 import { listAccountDrafts } from "./drafts.js";
 import { validateHtml } from "./html-policy.js";
 import { newDraftId, newInternalId } from "./ids.js";
-import { getDraftPublicUrl, getDraftRawUrl, getHomeUrl, getRequestBaseUrl } from "./public-url.js";
+import { getDraftPublicUrl, getDraftRawUrl, getRequestBaseUrl } from "./public-url.js";
 import { consumeRateLimit } from "./rate-limit.js";
-import { renderHome, renderNotFound } from "./render.js";
+import { renderNotFound } from "./render.js";
 import { deleteHtmlObject, getHtmlObject, putHtmlObject } from "./storage.js";
 import { registerWebRoutes } from "./web.js";
 import { registerMediaRoutes } from "./media.js";
+import { registerProjectRoutes } from "./projects.js";
 
 const encoder = new TextEncoder();
 
@@ -32,17 +34,7 @@ export function createApp() {
 
   app.get("/favicon.ico", (c) => c.env.ASSETS.fetch(c.req.raw));
 
-  app.get("/", (c) => {
-    const config = getConfig(c.env);
-    return c.html(
-      renderHome({
-        publicBaseUrl: getHomeUrl({
-          publicBaseUrl: config.publicBaseUrl,
-          requestBaseUrl: getRequestBaseUrl(c.req.raw)
-        })
-      })
-    );
-  });
+  app.get("/", (c) => c.redirect("/dashboard"));
 
   app.get("/healthz", async (c) => {
     try {
@@ -239,6 +231,8 @@ export function createApp() {
 
   registerWebRoutes(app);
   registerMediaRoutes(app, requireAuth);
+  registerProjectRoutes(app, requireAuth);
+  registerMediaDiagnostics(app);
 
   app.get("/d/:draftId", serveDraft);
   app.get("/d/:draftId/raw", serveDraft);

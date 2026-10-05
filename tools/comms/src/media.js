@@ -1,9 +1,10 @@
-import { lstat, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { getConfig, requireBinding } from "./config.js";
 import { getHomeUrl, getRequestBaseUrl } from "./public-url.js";
 import { renderMediaPage } from "./render.js";
 import { consumeRateLimit } from "./rate-limit.js";
+import { randomToken } from "./crypto.js";
 
 const MEDIA_TYPES = {
   ".mp4": "video/mp4",
@@ -80,6 +81,23 @@ export class MediaFiles {
     }
   }
 
+  async list() {
+    let names;
+    try {
+      names = await readdir(this.root);
+    } catch (error) {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    }
+    const media = [];
+    for (const name of names) {
+      if (!STORED_NAME.test(name)) continue;
+      const item = await this.get(name);
+      if (item) media.push(item);
+    }
+    return media;
+  }
+
   async delete(name) {
     if (!STORED_NAME.test(name)) return;
     await rm(join(this.root, `${name}.json`), { force: true });
@@ -129,8 +147,13 @@ export function registerMediaRoutes(app, requireAuth) {
   app.get("/m/:name", async (c) => {
     const media = await requireBinding("MEDIA", c.env.MEDIA).get(c.req.param("name"));
     if (!media) return c.notFound();
-    c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; media-src 'self'; base-uri 'none'; form-action 'none'");
+    const nonce = randomToken();
+    c.header("Cache-Control", "no-store");
+    c.header("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`);
     return c.html(renderMediaPage({
+      nonce,
+      size: media.size,
+      contentType: media.contentType,
       filename: media.filename,
       mediaPath: `/media/${media.name}`,
       downloadPath: `/media/${media.name}?download=1`
