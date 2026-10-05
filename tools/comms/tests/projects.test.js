@@ -56,6 +56,8 @@ test.each([
   ["smart-reminder-launch-v13-wide.mp4", "smart-reminder", null],
   ["smart-reminder-launch-vertical.mp4", "smart-reminder", null],
   ["tiro-promo-v14-33s-60fps.mp4", "tiro", null],
+  ["tiro-promo-v14-mobile.mp4", "tiro", null],
+  ["findus-demo-desktop.mp4", "findus", null],
   ["findus-promo-20s-web.mp4", "findus", null],
   ["Learning tool research: existing top-down and zoom", "learning-tool-research", "Learning tool research"],
   ["Reader-editable blocks — prototype", "reader-editable-blocks", "Reader-editable blocks"],

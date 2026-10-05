@@ -31,6 +31,16 @@ the HTML upload tool. It was called `postplan-local` before it moved into this r
   works: glossary links, collapsible sections, reader-hidden blocks.
 - **Local recordings play.** `media-src 'self'` lets a document play recordings
   served by this host. It does not allow video from other hosts or ports.
+- **Recording pages buffer before playback.** The page requests automatic
+  preloading and shows the continuously playable portion of the video as a
+  percentage. Play and native controls unlock at 30% buffered. Downloading
+  continues during playback; slow connections can still run out of buffered
+  video. “Download fully before playing” instead fetches the entire file with
+  byte-based progress, then plays the completed local copy. Safari may limit
+  automatic preloading until a user gesture; use the full-download button if
+  it stops short of 30%. Failed downloads can be retried. Leaving the page
+  cancels the transfer and releases the local copy. These controls apply to
+  `/m/` recording pages; embedded videos in uploaded reports keep their own player.
 
 So a document is checked twice. `src/html-policy.js` rejects, at upload time:
 external scripts (`<script src>` and the SVG spelling `<script href>`), forms,
@@ -89,17 +99,6 @@ migrations have run, rather than failing on the first request.
 | `UPLOAD_RATE_LIMIT_MAX` | `30` per minute | Uploads per API key. |
 | `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/settings/api-keys` answers 503. The uploads dashboard needs no browser sign-in. The API is unaffected. |
 
-- **Recording pages buffer before playback.** The page requests automatic
-  preloading and shows the continuously playable portion of the video as a
-  percentage. Play and native controls unlock at 30% buffered. Downloading
-  continues during playback; slow connections can still run out of buffered
-  video. “Download fully before playing” instead fetches the entire file with
-  byte-based progress, then plays the completed local copy. Safari may limit
-  automatic preloading until a user gesture; use the full-download button if
-  it stops short of 30%. Failed downloads can be retried. Leaving the page
-  cancels the transfer and releases the local copy. These controls apply to
-  `/m/` recording pages; embedded videos in uploaded reports keep their own player.
-
 ## Browse uploads
 
 Open [Comms](https://minj.tail794979.ts.net:8774/) or `/dashboard` to browse
@@ -117,8 +116,8 @@ Uploads carry no project field, so the project is read from names:
 - A report title names it before ` · `, ` — `, ` – `, ` | `, ` - ` or `: `.
   "Smart Reminder · launch video v13" belongs to `smart-reminder`.
 - A video filename names it once trailing version, format and generic words are
-  removed: `v13`, `33s`, `60fps`, `1080p`, `wide`, `square`, `vertical`, `web`,
-  `final`, `promo`, `launch`, `demo` and the like.
+  removed: `v13`, `33s`, `60fps`, `1080p`, `wide`, `square`, `vertical`, `mobile`,
+  `web`, `final`, `promo`, `launch`, `demo` and the like.
   `smart-reminder-launch-v13-wide.mp4` belongs to `smart-reminder` too.
 
 So name a project's files after it, and title its reports `<Project> · <topic>`.

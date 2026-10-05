@@ -10,7 +10,7 @@ import { consumeRateLimit } from "./rate-limit.js";
 // "smart-reminder-launch-v13-wide.mp4" names it once the variant and
 // version suffixes are gone. Both become the slug "smart-reminder".
 const SEPARATOR = /\s+[·•|—–-]\s+|:\s+/;
-const VARIANT = /^(?:v\d+|\d+s|\d+fps|\d+p|\d+k|wide|square|vertical|portrait|landscape|web|final|draft|hd)$/;
+const VARIANT = /^(?:v\d+|\d+s|\d+fps|\d+p|\d+k|wide|square|vertical|portrait|landscape|mobile|desktop|tablet|web|final|draft|hd)$/;
 const GENERIC = new Set(["promo", "launch", "trailer", "teaser", "demo", "video", "videos", "recording", "clip"]);
 
 export const PROJECT_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
