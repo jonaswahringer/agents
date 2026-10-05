@@ -89,6 +89,17 @@ migrations have run, rather than failing on the first request.
 | `UPLOAD_RATE_LIMIT_MAX` | `30` per minute | Uploads per API key. |
 | `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/settings/api-keys` answers 503. The uploads dashboard needs no browser sign-in. The API is unaffected. |
 
+- **Recording pages buffer before playback.** The page requests automatic
+  preloading and shows the continuously playable portion of the video as a
+  percentage. Play and native controls unlock at 30% buffered. Downloading
+  continues during playback; slow connections can still run out of buffered
+  video. “Download fully before playing” instead fetches the entire file with
+  byte-based progress, then plays the completed local copy. Safari may limit
+  automatic preloading until a user gesture; use the full-download button if
+  it stops short of 30%. Failed downloads can be retried. Leaving the page
+  cancels the transfer and releases the local copy. These controls apply to
+  `/m/` recording pages; embedded videos in uploaded reports keep their own player.
+
 ## Browse uploads
 
 Open [Comms](https://minj.tail794979.ts.net:8774/) or `/dashboard` to browse
@@ -311,3 +322,12 @@ to `bind()`. The pieces `src/` uses are covered by `tests/adapters.test.js`.
 ## Licence
 
 MIT, inherited from upstream. See `LICENSE`.
+
+## Diagnose playback on a device
+
+Open `/diagnostics/media/<mediaId>` for an existing recording. The page can
+compare streamed playback with playback from a fully downloaded copy. It records
+response-header timing, download duration and video events in a copyable text box.
+Measurements stay in the browser; there is no telemetry endpoint or stored log.
+A download starts only when requested and times out after 60 seconds. Use a small
+recording first on cellular connections.

@@ -59,7 +59,11 @@ test("publishing a recording returns working player, media and download links", 
   expect(player.status).toBe(200);
   expect(player.headers.get("content-security-policy")).toContain("media-src 'self'");
   const html = await player.text();
-  expect(html).toContain(`<video controls playsinline preload="metadata"`);
+  const nonce = html.match(/<script nonce="([^"]+)"/)[1];
+  expect(player.headers.get("content-security-policy")).toContain(`script-src 'nonce-${nonce}'`);
+  expect(player.headers.get("content-security-policy")).not.toContain("script-src 'unsafe-inline'");
+  expect(player.headers.get("cache-control")).toBe("no-store");
+  expect(html).toContain(`<video playsinline preload="auto"`);
   expect(html).toContain(`/media/${result.mediaId}`);
   expect(html).toContain("Download recording");
 
@@ -219,4 +223,19 @@ test("the publish command uploads a path with spaces through an actual HTTP serv
   } finally {
     await server.stop(true);
   }
+});
+
+test("opt-in diagnostics use existing media access and keep measurements in the browser", async () => {
+  const { mediaId } = await (await upload()).json();
+  const response = await call(`/diagnostics/media/${mediaId}`);
+  expect(response.status).toBe(200);
+  expect(response.headers.get("cache-control")).toBe("no-store");
+  expect(response.headers.get("content-security-policy")).toContain("connect-src 'self'");
+  expect(response.headers.get("content-security-policy")).toContain("media-src 'self' blob:");
+  const html = await response.text();
+  expect(html).toContain(`data-path="/media/${mediaId}"`);
+  expect(html).toContain('preload="none"');
+  expect(html).toContain("Play downloaded copy");
+  expect(html).not.toContain(KEY);
+  expect((await call("/diagnostics/media/missing.mp4")).status).toBe(404);
 });

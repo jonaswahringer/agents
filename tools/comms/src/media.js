@@ -4,6 +4,7 @@ import { getConfig, requireBinding } from "./config.js";
 import { getHomeUrl, getRequestBaseUrl } from "./public-url.js";
 import { renderMediaPage } from "./render.js";
 import { consumeRateLimit } from "./rate-limit.js";
+import { randomToken } from "./crypto.js";
 
 const MEDIA_TYPES = {
   ".mp4": "video/mp4",
@@ -146,8 +147,13 @@ export function registerMediaRoutes(app, requireAuth) {
   app.get("/m/:name", async (c) => {
     const media = await requireBinding("MEDIA", c.env.MEDIA).get(c.req.param("name"));
     if (!media) return c.notFound();
-    c.header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; media-src 'self'; base-uri 'none'; form-action 'none'");
+    const nonce = randomToken();
+    c.header("Cache-Control", "no-store");
+    c.header("Content-Security-Policy", `default-src 'none'; script-src 'nonce-${nonce}'; style-src 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'`);
     return c.html(renderMediaPage({
+      nonce,
+      size: media.size,
+      contentType: media.contentType,
       filename: media.filename,
       mediaPath: `/media/${media.name}`,
       downloadPath: `/media/${media.name}?download=1`

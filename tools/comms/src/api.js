@@ -1,3 +1,4 @@
+import { registerMediaDiagnostics } from "./media-diagnostics.js";
 import { Hono } from "hono";
 import { clientIp, requestId } from "./client-ip.js";
 import { getConfig, requireBinding } from "./config.js";
@@ -229,6 +230,7 @@ export function createApp() {
 
   registerWebRoutes(app);
   registerMediaRoutes(app, requireAuth);
+  registerMediaDiagnostics(app);
 
   app.get("/d/:draftId", serveDraft);
   app.get("/d/:draftId/raw", serveDraft);
