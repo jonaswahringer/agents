@@ -87,7 +87,18 @@ migrations have run, rather than failing on the first request.
 | `UPLOAD_BODY_LIMIT` | `2mb` | Size cap on the whole JSON request. |
 | `UPLOAD_IP_RATE_LIMIT_MAX` | `60` per minute | Uploads per client IP, counted before authentication. Over the tailnet the IP is the peer address from `X-Forwarded-For`, which Tailscale Serve sets and does not let a client override. When that header is present nothing else is consulted, so `CF-Connecting-IP` and `X-Real-IP` cannot be used to forge it. |
 | `UPLOAD_RATE_LIMIT_MAX` | `30` per minute | Uploads per API key. |
-| `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/dashboard` and `/settings/api-keys` answer 503. The API is unaffected. |
+| `POSTPLAN_SESSION_SECRET` | unset | Browser sign-in via shoo.dev. Left unset here, so `/settings/api-keys` answers 503. The uploads dashboard needs no browser sign-in. The API is unaffected. |
+
+## Browse uploads
+
+Open [Comms](https://minj.tail794979.ts.net:8774/) or `/dashboard` to browse
+HTML reports and videos, newest first. No browser login is needed: access is
+controlled by the deployment's Tailscale policy. The page lists uploads across
+all accounts and links to the latest version of each report or the video player.
+Deleted and disabled reports are omitted.
+
+Keep this service behind Tailscale with the backend bound to loopback. Uploads,
+deletion and API-key operations retain their existing authentication requirements.
 
 ## Publish a document
 
@@ -151,7 +162,7 @@ The command also accepts `POSTPLAN_API_URL` and `POSTPLAN_API_KEY`. It prints:
 - `mediaId`: the generated filename, for deletion through the API.
 
 Each upload creates a new recording and link. There is no recording version
-history or dashboard listing. To put it in a report, use the media URL returned
+history. Recordings appear alongside HTML reports on `/dashboard`. To put it in a report, use the media URL returned
 by the upload, or its path when the report is hosted on the same service:
 
 ```html

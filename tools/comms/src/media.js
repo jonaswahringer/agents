@@ -1,4 +1,4 @@
-import { lstat, mkdir, open, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { getConfig, requireBinding } from "./config.js";
 import { getHomeUrl, getRequestBaseUrl } from "./public-url.js";
@@ -78,6 +78,23 @@ export class MediaFiles {
       if (error.code === "ENOENT" || error instanceof SyntaxError) return null;
       throw error;
     }
+  }
+
+  async list() {
+    let names;
+    try {
+      names = await readdir(this.root);
+    } catch (error) {
+      if (error.code === "ENOENT") return [];
+      throw error;
+    }
+    const media = [];
+    for (const name of names) {
+      if (!STORED_NAME.test(name)) continue;
+      const item = await this.get(name);
+      if (item) media.push(item);
+    }
+    return media;
   }
 
   async delete(name) {
