@@ -1,0 +1,26 @@
+# Copied skills. See docs/skills-sync.md for the manifest format.
+repository	https://github.com/mattpocock/skills.git
+ref	main
+commit	49dd158d1076134a641b33efb035946536778336
+skill	ask-matt	skills/engineering/ask-matt
+skill	code-review	skills/engineering/code-review
+skill	codebase-design	skills/engineering/codebase-design
+skill	diagnosing-bugs	skills/engineering/diagnosing-bugs
+skill	domain-modeling	skills/engineering/domain-modeling
+skill	grill-me	skills/productivity/grill-me
+skill	grill-with-docs	skills/engineering/grill-with-docs
+skill	grilling	skills/productivity/grilling
+skill	handoff	skills/productivity/handoff
+skill	implement	skills/engineering/implement
+skill	improve-codebase-architecture	skills/engineering/improve-codebase-architecture
+skill	prototype	skills/engineering/prototype
+skill	setup-matt-pocock-skills	skills/engineering/setup-matt-pocock-skills
+skill	tdd	skills/engineering/tdd
+skill	teach	skills/productivity/teach
+skill	to-spec	skills/engineering/to-spec
+skill	to-tickets	skills/engineering/to-tickets
+skill	triage	skills/engineering/triage
+skill	wayfinder	skills/engineering/wayfinder
+local	find-skills
+local	resolving-merge-conflicts
+local	writing-great-skills

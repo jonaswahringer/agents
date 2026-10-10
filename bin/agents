@@ -44,6 +44,8 @@ Usage:
   agents configure           Edit the saved global configuration
   agents source              Show where agents runs from and how global config links
   agents skills              Choose installed skills
+  agents skills add NAME     Add one skill without changing other selections
+  agents skills sync FOLDER  Merge copied skills from their upstream repository
   agents skills source       Show the skills folder and each skill's links
   agents doctor              Check the current installation
   agents doctor --verbose    Check, then show every path and link
@@ -969,6 +971,11 @@ install_command() {
 }
 
 skills_command() {
+  if [[ "${1:-}" == "sync" ]]; then
+    shift
+    bash "$ROOT/tools/skills-sync.sh" "$@"
+    return
+  fi
   discover_skills
   load_selected
   load_global_state
@@ -976,12 +983,25 @@ skills_command() {
     [[ $# -eq 1 ]] || die "usage: agents skills source"
     skills_source_report
     return 0
+  elif [[ "${1:-}" == "add" ]]; then
+    [[ $# -eq 2 ]] || die "usage: agents skills add folder/name"
+    local resolved status skill
+    resolved="$(resolve_skill "$2")" && status=0 || status=$?
+    [[ $status -ne 2 ]] || die "several folders contain '$2'; name it as folder/$2"
+    [[ $status -eq 0 ]] || die "unknown skill: $2"
+    for skill in "${SELECTED[@]}"; do
+      if [[ "${skill##*/}" == "${resolved##*/}" && "$skill" != "$resolved" ]]; then
+        die "'$skill' already installs '${resolved##*/}'; deselect it through 'agents skills' first"
+      fi
+    done
+    add_selected "$resolved"
+    NON_INTERACTIVE=1
   elif [[ "${1:-}" == "--all" ]]; then
     select_all_skills
   elif [[ "${1:-}" == "--none" ]]; then
     SELECTED=()
   elif [[ $# -gt 0 ]]; then
-    die "usage: agents skills [--all|--none]"
+    die "usage: agents skills [add folder/name|sync folder|source|--all|--none]"
   else
     interactive_menu 0 || die "setup cancelled"
   fi
@@ -1293,6 +1313,7 @@ reconcile_command() {
 }
 
 case "${1:-help}" in
+  _validate_skill) shift; [[ $# -eq 2 ]] || die "usage: _validate_skill path name"; validate_skill_metadata "$@" ;;
   _install) shift; install_command "$@" ;;
   _reconcile) shift; reconcile_command "$@" ;;
   _menu_snapshot) shift; discover_skills; load_selected; load_global_state; render_menu 1 -1 ;;

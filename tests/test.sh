@@ -213,6 +213,27 @@ assert_missing "$TEST_HOME/.agents/skills/teach"
 assert_link "$TEST_HOME/.agents/skills/teach"
 assert_missing "$TEST_HOME/.agents/skills/commit"
 
+# Adding one skill preserves the profile and every previous selection.
+cp -R "$TEST_HOME/.config/agents/profile" "$TEST_ROOT/profile-before-add"
+cp "$TEST_HOME/.config/agents/global-config" "$TEST_ROOT/global-before-add"
+"$AGENTS" skills add jonasw/commit >/dev/null
+assert_link "$TEST_HOME/.agents/skills/teach"
+assert_link "$TEST_HOME/.agents/skills/commit"
+assert_contains "$TEST_HOME/.config/agents/selected-skills" "mattp/teach"
+assert_contains "$TEST_HOME/.config/agents/selected-skills" "jonasw/commit"
+cmp "$TEST_ROOT/global-before-add" "$TEST_HOME/.config/agents/global-config" || fail "add changed global config state"
+diff -r "$TEST_ROOT/profile-before-add" "$TEST_HOME/.config/agents/profile" || fail "add changed private profile answers"
+cp "$TEST_HOME/.config/agents/selected-skills" "$TEST_ROOT/selection-after-add"
+"$AGENTS" skills add jonasw/commit >/dev/null
+cmp "$TEST_ROOT/selection-after-add" "$TEST_HOME/.config/agents/selected-skills" || fail "add should be idempotent"
+if "$AGENTS" skills add pstack/teach > "$TEST_ROOT/add-conflict.txt" 2>&1; then
+  fail "add should reject a competing plain skill name"
+fi
+if "$AGENTS" skills add missing > "$TEST_ROOT/add-missing.txt" 2>&1; then
+  fail "add should reject unknown skills"
+fi
+cmp "$TEST_ROOT/selection-after-add" "$TEST_HOME/.config/agents/selected-skills" || fail "failed add changed selections"
+
 # Two folders ship a skill called "teach"; the first selected folder installs it
 # and the other is reported as skipped rather than silently overwriting the link.
 "$AGENTS" skills --all >/dev/null
@@ -388,4 +409,5 @@ fi
 
 echo "PASS: installer, skill folders, deduplication, conflicts, and migrations"
 python3 "$ROOT/tests/test_usage.py"
+python3 "$ROOT/tests/test_skills_sync.py"
 /bin/bash "$ROOT/tests/test_furnace_install.sh"
