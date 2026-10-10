@@ -140,6 +140,7 @@ agents update
 agents update --skills
 agents configure
 agents skills
+agents skills add mattp/tdd
 agents doctor
 ```
 
@@ -182,6 +183,17 @@ For the same reason, `agents skills --none` keeps `nice` while global configurat
 is enabled. Install with `--no-config` to manage skills without that requirement.
 
 Run `agents configure` when you want to change the saved answers.
+
+`agents skills add mattp/tdd` adds one skill while keeping the saved selection.
+Use `folder/name` when more than one folder ships that name. A competing selected
+version must be deselected through `agents skills` first.
+
+Copied upstream skills are maintained in a Git checkout with
+`./bin/agents skills sync mattp`. It merges upstream edits into reviewable source
+changes and lists new candidates. Import one with
+`./bin/agents skills sync mattp --add pr`. See [skills syncing](docs/skills-sync.md)
+for dry runs, conflicts, and manifests. Installing and updating never fetch skills
+directly from their upstream repositories.
 
 ## Non-interactive install
 
