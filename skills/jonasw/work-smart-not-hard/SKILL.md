@@ -1,61 +1,76 @@
 ---
 name: work-smart-not-hard
-description: Pick the model and reasoning effort for a delegated task. Use when spawning a subagent, running a workflow, deciding how hard to reason a task, or keeping a delegation inside an approved model/effort whitelist.
+description: Choose a model and reasoning effort for a task or delegated child while respecting the approved routing policy and current runtime limits.
 ---
 
 # Work smart, not hard
 
-Spend intelligence where it changes the outcome, and nowhere else. Every delegated task gets a **model** and a **reasoning effort**; picking both too high burns cost and latency, too low ships sloppy work. The job is to **right-size**, then **escalate on evidence** — a failed attempt, a red test, a rejected verification — never on anticipation.
+Choose the model for the task's role, then choose its effort from the task's difficulty and scope. Escalate when an attempt fails, evidence is ambiguous, or the correctness stakes demand another pass. Do not spend effort before the task calls for it.
 
-The decision has three inputs:
+Parallel delegation needs authorization from the task or applicable instructions. Every lead and child gets its own model and effort choice. Catalog visibility confirms that a model and control exist in this runtime. It does not confirm subscription entitlement.
 
-1. **Task type** — the *lane* (below). Picks the model first, because different models are good at different things.
-2. **Difficulty** — how hard the *thinking* is (novelty, ambiguity, correctness stakes, ease of getting it wrong). Drives **effort** up the ladder: mechanical/specified → low; real reasoning or some ambiguity → medium/high; novel, correctness-critical, easy to get wrong → xhigh, and at the very top the lane's escalation model.
-3. **Complexity** — how *much* is involved (scope, moving parts, files, coordination, context to hold). Also raises effort, and on its own can justify the lane's stronger model even when each step is easy — a large mechanical refactor is complex but not difficult.
+## Routing policy
 
-When two settings feel equally right, **take the lower** and let evidence pull you up.
+The task role determines the provider owner.
 
-Hard rules that bound every choice:
+| Task role | Lead | Authors and children |
+|---|---|---|
+| Code intended to merge, including frontend and UI/UX | Claude Opus 5.5; Fable 5.1 only when explicitly chosen | Claude Sonnet 5.5 authors. Lightweight children may use Haiku 5.5 when available, GPT-6 Luna at low–medium, or GPT-6.1 Sol at low. |
+| Investigation, review, verification, or GPT-led orchestration | GPT-6 Astra | Claude Sonnet 5.5 authors mergeable edits. GPT-6.1 Sol or Astra children handle investigation, review, and verification. GPT lightweight children may inventory files and extract supplied facts only. |
 
-- **Never exceed the [whitelist](#the-whitelist).** If a task seems to need a model or effort that isn't approved, stop and ask the human.
-- **Fable 5 is opt-in only, and never runs above `high`.** The priciest model — chosen for cleverness, creativity, and taste, not routed to by default. Never auto-select it; reach for it only when the driver explicitly names it, capped at `high`.
-- **Match the choice to the delegated job, not the parent's.** A cheap fan-out subagent stays cheap even when the orchestrator is doing hard work; a final correctness gate runs hot even when the surrounding task was routine.
+Claude-led orchestration uses Opus 5.5, or explicitly chosen Fable 5.1, with Sonnet 5.5 authors and lightweight children. GPT-led orchestration uses GPT-6 Astra with Sonnet 5.5 authors and GPT investigation, review, and verification children. GPT children do not author mergeable edits unless an explicit, narrowly scoped emergency exception permits crossing the provider boundary.
 
-## The whitelist
+Choose effort separately for the lead and every child. Use low for mechanical inventory or extraction, medium for routine reasoning, and high or above only when ambiguity, scope, or failed evidence warrants it. A child does not inherit the parent's effort. Escalate on evidence, not anticipation.
 
-The single source of truth for what is allowed. **Humans curate this table** — the routing below only chooses *within* these rows.
+## Approved models and controls
 
-| Model | Provider | Allowed effort | Cost (in / out per 1M) | Good for |
-|---|---|---|---|---|
-| **Composer 2.5** | Cursor | _fixed (no dial)_ | cheap — flat on Cursor plan | "Boring" routine coding + adjacent grunt work |
-| **GPT 5.6 Luna** | OpenAI | `none`–`max` | $1 / $6 | Cheap fan-out; high-volume subagents |
-| **Grok Code 4.5** | xAI (via Cursor) | `low`·`medium`·`high` (+ fast on/off) | $2 / $6 (fast: $4 / $18; >200K ctx: $4 / $12) | Well-spec'd hard coding; executing a settled plan |
-| **GPT 5.6 Terra** | OpenAI | `none`–`max` | $2.50 / $15 | Cost-lean backend / refactors |
-| **GPT 5.6 Sol** | OpenAI | `none`–`max` | $5 / $30 | Backend, large refactors, hard reasoning |
-| **Opus 5** | Anthropic | ⟨— NEEDS EFFORT DIAL —⟩ | ⟨— NEEDS PRICING —⟩ | Frontend / UI, research synthesis, general reasoning, verification |
-| **Fable 5** | Anthropic | `low`–`high` (**no `max`**) | $10 / $50 | Cleverness, creativity, taste on hard UI/design — **opt-in only** (driver must ask) |
+The runtime catalog was checked on 2026-10-11. IDs below are runtime IDs, not entitlement claims.
 
-## Route by task type
-
-Find the lane, take the **default**, then use difficulty + complexity to move within it. Escalate only on evidence.
-
-A hard task you've already planned is **spec'd** — the judgment is spent, so it belongs on a strong-but-cheap coding model, not an expensive reasoner. That's its own lane, and it's the one place you *don't* escalate upward by default: buying more reasoning would just re-buy work you've done.
-
-| Task type | Default | Effort | Escalate to |
+| Model | Runtime ID | Allowed effort | Role |
 |---|---|---|---|
-| **Boring / routine coding** (boilerplate, glue, config, scaffolding, mechanical edits) | Composer 2.5, GPT 5.6 Terra, or Grok Code 4.5 | Composer: —; Terra/Grok: `low`–`medium` | If it turns out *not* boring (real reasoning surfaces), kick up to the Backend lane |
-| **Spec'd implementation** (hard code whose design is already settled — you planned it) | Grok Code 4.5, or GPT 5.6 Terra | Grok/Terra: `medium`–`high` | Only sideways, on evidence: if execution reveals *unsettled* design, the plan wasn't done → Backend lane |
-| **Backend / large refactors** | GPT 5.6 Terra | `high`–`xhigh` | GPT 5.6 Sol (`high`) when genuinely hard. Drop boring sub-parts to Composer / Terra `low` |
-| **Frontend / UI** (Claude models are stronger here) | Opus 5 | by difficulty | Fable 5 (`≤ high`) for the hardest UI — **only if the driver asks** |
-| **Planning** (implementation plans, breaking work into steps, design docs) | Opus 5 | `medium`–`high` by difficulty/complexity | — |
-| **Research** | Luna sub-agents (fan-out, cheap) at `low`–`medium` → **Opus 5** synthesizes | synth: `medium`–`high` | Raise synth effort before changing model |
-| **General reasoning / debugging / design trade-offs** | GPT 5.6 Terra or Sol, or Opus 5 | `low`–`high` by difficulty | Fable 5 (`≤ high`) only if the driver asks |
-| **Verification / correctness gate / judging** | GPT 5.6 Terra or Sol, or Opus 5 | `low`–`high` | keep the gate at least as hot as the work it checks |
+| Claude Opus 5.5 | `claude-opus-5-5` | low–max | Claude lead and orchestration |
+| Claude Sonnet 5.5 | `claude-sonnet-5-5` | low–max | Claude code author |
+| Claude Fable 5.1 | `claude-fable-5-1` | low–high only | Explicitly chosen taste/design lead |
+| GPT-6 Astra | `gpt-6-astra` | low–ultra | GPT lead and orchestration |
+| GPT-6.1 Sol | `gpt-6.1-sol` | low–ultra | GPT investigation, review, verification; lightweight child at low |
+| GPT-6 Luna | `gpt-6-luna` | low–max | Lightweight inventory and extraction at low–medium |
+| Claude Haiku 5.5 | Not exposed in the current T3 catalog | low–max when available | Lightweight child when available |
 
-## Applying it
+The current T3 runtime catalog does not expose Haiku 5.5. It exposes Haiku 4.5 without an effort control, but Haiku 4.5 is blacklisted and must not be used as a substitute. When Haiku 5.5 cannot run, use GPT-6 Luna at low–medium or GPT-6.1 Sol at low for lightweight inventory and extraction. The GPT child may not author a mergeable edit.
 
-1. **Name the lane** — which task type is this? The model comes from the lane.
-2. **Take the lane's default** model and starting effort.
-3. **Dial with difficulty and complexity**, reaching for the escalation model only at the top.
-4. **Escalate on evidence** — a red test, a rejected verification, a missed attempt — never anticipation.
-5. **Stay inside the [whitelist](#the-whitelist)**; if the task seems to need more, ask the human.
+## Blacklist
+
+Never select these as a parent, child, or fallback:
+
+- Claude Haiku 4.5, including any older Haiku substituted for Haiku 5.5
+- GPT-5.6 Terra
+- Every Grok model, including Grok 4.7 and Grok Code 4.5
+
+## Reasoning effort
+
+Choose effort per model call, not once for the whole task.
+
+| Effort | Use when |
+|---|---|
+| low | Inventory, extraction from supplied material, or a clear mechanical step |
+| medium | Routine investigation, review, or implementation within a settled design |
+| high | Several moving parts, meaningful ambiguity, or a first failure that needs diagnosis |
+| xhigh / max | A correctness-critical or novel lead task that remains uncertain after a strong attempt |
+| ultra | Only when the runtime supports it and evidence shows max is insufficient |
+
+Do not raise child effort just because the parent is using a stronger model. Keep Fable 5.1 opt-in and at high or below even if the catalog exposes higher settings.
+
+## Rate limits and urgent fallbacks
+
+Use this fallback procedure only when the user marks the work time-sensitive or its deadline comes before the provider's reported reset. A weekly refresh is not urgent by itself.
+
+First identify the limit from the provider's message and preserve its reset time:
+
+- A temporary throttle may clear after the reported short wait. Retry after that time when the deadline allows.
+- A model-specific limit blocks that model. Prefer an available approved model in the same role.
+- A shared session limit can cover several models in that provider session. Switching apps or models does not reset shared allowance.
+- Weekly exhaustion lasts until the provider-reported weekly reset. Do not guess a reset time.
+
+If Haiku 5.5 is blocked or unavailable, use Luna low–medium or Sol low for lightweight inventory and extraction. Selecting a different orchestrator does not make blocked child models available. A Claude authoring task remains Claude-owned, and GPT investigation, review, and verification remain GPT-owned. Crossing either boundary requires an explicit, narrowly scoped emergency exception that names the work and permitted model.
+
+Never automatically enable paid overflow, buy credits, upgrade a plan, purchase a reset, or switch to API billing. If no approved route is available before the deadline, checkpoint findings, pending checks, and provider reset times. Do not report an incomplete verification gate as passed.
