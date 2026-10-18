@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Runs every test suite: the installer suite, then each tool under tools/.
+# Runs the installer suite, tool suites, and skill-owned scripts/test.sh suites.
 # Suites are found on disk, so a new tool with tests needs no change here.
 # PYTHON picks the interpreter, e.g. PYTHON=/usr/bin/python3 to check 3.9.
 
@@ -34,6 +34,12 @@ bun_suite() (
 )
 
 suite "installer and usage" "$ROOT/tests/test.sh"
+
+for skill in "$ROOT"/skills/*/*; do
+  if [[ -f "$skill/scripts/test.sh" ]]; then
+    suite "skill ${skill#"$ROOT"/skills/}" /bin/bash "$skill/scripts/test.sh"
+  fi
+done
 
 for tool in "$ROOT"/tools/*/; do
   tool="${tool%/}"

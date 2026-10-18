@@ -1,0 +1,4 @@
+interface:
+  display_name: "C4 architecture explorer"
+  short_description: "Explore architecture with source evidence and C4 diagrams"
+  default_prompt: "Use $c4-explorer to explain this repository's architecture, trace a useful behavior, and build an interactive diagram with source evidence."

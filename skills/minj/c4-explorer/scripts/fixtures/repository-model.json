@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "name": "Repository fixture",
+  "root": "context",
+  "note": "Static test fixture.",
+  "snapshot": {
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "date": "2026-10-18",
+    "workingTree": "Temporary test inputs."
+  },
+  "evidence": {
+    "entry": {
+      "path": "module.py",
+      "line": 2,
+      "endLine": 60,
+      "reason": "Source used by the test fixture."
+    }
+  },
+  "views": [
+    {
+      "id": "context",
+      "name": "Context",
+      "abstraction": "context",
+      "level": "Context",
+      "boundary": "Fixture boundary",
+      "description": "Fixture view.",
+      "nodes": [
+        {
+          "id": "system",
+          "name": "System",
+          "type": "system",
+          "kind": "System",
+          "description": "Fixture responsibility.",
+          "assessment": "observed",
+          "evidence": [
+            "entry"
+          ],
+          "childView": "containers"
+        }
+      ],
+      "edges": [],
+      "assessment": "observed",
+      "evidence": [
+        "entry"
+      ]
+    },
+    {
+      "id": "containers",
+      "name": "Containers",
+      "abstraction": "container",
+      "level": "Container",
+      "boundary": "Fixture boundary",
+      "description": "Fixture view.",
+      "nodes": [
+        {
+          "id": "app",
+          "name": "App",
+          "type": "container",
+          "kind": "Container",
+          "description": "Fixture responsibility.",
+          "assessment": "observed",
+          "evidence": [
+            "entry"
+          ],
+          "tech": "Python",
+          "childView": "components"
+        }
+      ],
+      "edges": [],
+      "assessment": "observed",
+      "evidence": [
+        "entry"
+      ],
+      "scope": {
+        "id": "system",
+        "name": "System",
+        "type": "system"
+      }
+    },
+    {
+      "id": "components",
+      "name": "Components",
+      "abstraction": "component",
+      "level": "Component",
+      "boundary": "Fixture boundary",
+      "description": "Fixture view.",
+      "nodes": [
+        {
+          "id": "handler",
+          "name": "Handler",
+          "type": "component",
+          "kind": "Component",
+          "description": "Fixture responsibility.",
+          "assessment": "observed",
+          "evidence": [
+            "entry"
+          ],
+          "tech": "Python",
+          "childView": "code"
+        }
+      ],
+      "edges": [],
+      "assessment": "observed",
+      "evidence": [
+        "entry"
+      ],
+      "scope": {
+        "id": "app",
+        "name": "App",
+        "type": "container",
+        "tech": "Python"
+      }
+    },
+    {
+      "id": "code",
+      "name": "Code",
+      "abstraction": "code",
+      "level": "Code",
+      "boundary": "Fixture boundary",
+      "description": "Fixture view.",
+      "nodes": [
+        {
+          "id": "run",
+          "name": "run",
+          "type": "function",
+          "kind": "Function",
+          "description": "Fixture responsibility.",
+          "assessment": "observed",
+          "evidence": [
+            "entry"
+          ],
+          "tech": "Python"
+        }
+      ],
+      "edges": [],
+      "assessment": "observed",
+      "evidence": [
+        "entry"
+      ],
+      "scope": {
+        "id": "handler",
+        "name": "Handler",
+        "type": "component",
+        "tech": "Python"
+      }
+    }
+  ]
+}

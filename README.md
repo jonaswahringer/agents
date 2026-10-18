@@ -230,6 +230,10 @@ Skills live under `skills/<folder>/<name>/SKILL.md`. The folder names whoever wr
 them, so you can take one person's set without reading through the rest. Adding a
 folder to the repository is enough to make it appear in the menu.
 
+### `minj`
+
+- `c4-explorer` explores repository architecture through source-backed C4 diagrams, traced behaviors, and animated drill-down. Includes reusable HTML, CSS, JavaScript, and an offline builder for demos and project models.
+
 ### `jonasw`
 
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.

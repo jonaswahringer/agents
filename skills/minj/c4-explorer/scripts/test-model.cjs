@@ -1,0 +1,48 @@
+'use strict';
+const assert = require('node:assert/strict');
+require('../assets/explorer.js');
+require('../assets/model.js');
+const model = require('./fixtures/repository-model.json');
+const source = C4RepositoryModel.createSource(model);
+assert.equal(source.samples, false);
+assert.deepEqual(source.search('run', 'demo', 8)[0].trail.map(item => item.id), ['context', 'containers', 'components', 'code']);
+assert.equal(source.search('module.py', 'demo', 2).length, 2, 'Evidence paths are searchable');
+assert.equal(source.getView('code').nodes[0].type, 'function');
+assert.deepEqual(source.search('   ', 'demo', 8), [], 'Empty searches produce no results');
+assert.deepEqual(source.search('module', 'demo', 0), [], 'A zero search limit produces no results');
+const bad = change => { const copy = structuredClone(model); change(copy); assert.throws(() => C4RepositoryModel.createSource(copy)); };
+bad(m => m.views[0].nodes[0].evidence = ['missing']);
+bad(m => m.views[0].nodes[0].assessment = 'inferred');
+bad(m => m.views[1].scope.id = 'wrong-system');
+bad(m => m.views[1].scope.name = 'Wrong system');
+bad(m => m.views[2].scope.tech = 'Different language');
+bad(m => m.views[0].nodes[0].childView = 'missing');
+bad(m => m.views.push(structuredClone(m.views[0])));
+bad(m => m.views[0].nodes.push({ ...m.views[0].nodes[0], id: 'app', name: 'Different' }));
+bad(m => delete m.views[0].nodes[0].childView);
+bad(m => m.root = 'missing');
+bad(m => m.schemaVersion = 2);
+bad(m => m.snapshot.revision = 'short');
+bad(m => m.snapshot.date = '2026-02-30');
+bad(m => delete m.snapshot.workingTree);
+bad(m => delete m.views[1].name);
+bad(m => m.views[3].nodes[0].description = { unsafe: 'object' });
+bad(m => m.evidence.entry.line = true);
+bad(m => m.views[0].nodes[0].external = 'false');
+bad(m => {
+  const view = m.views[1], app = view.nodes[0];
+  view.nodes.push({ ...app, id: 'other', name: 'Other', childView: undefined });
+  view.edges.push({ id: 'call', from: 'app', to: 'other', label: 'Calls', assessment: 'observed', evidence: ['entry'] });
+});
+bad(m => {
+  const view = m.views[1];
+  view.edges.push({ id: 'self', from: 'app', to: 'app', label: 'Calls itself', protocol: 'In process', assessment: 'observed', evidence: ['entry'] });
+});
+bad(m => {
+  const view = m.views[1];
+  const flow = { id: 'flow', name: 'Flow', edges: [], assessment: 'observed', evidence: ['entry'] };
+  view.flows = [flow, { ...flow }];
+});
+const controller = new AbortController(); controller.abort();
+assert.throws(() => source.getView('context', { signal: controller.signal }), { name: 'AbortError' });
+console.log('Passed: repository metadata, evidence, containment, stable identity, reachable views, function symbols, search trails, invalid models, and cancellation.');
