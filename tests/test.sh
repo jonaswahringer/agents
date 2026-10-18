@@ -429,4 +429,5 @@ fi
 echo "PASS: installer, skill folders, deduplication, conflicts, and migrations"
 python3 "$ROOT/tests/test_usage.py"
 python3 "$ROOT/tests/test_skills_sync.py"
+python3 "$ROOT/tests/test_skill_menu.py"
 /bin/bash "$ROOT/tests/test_furnace_install.sh"

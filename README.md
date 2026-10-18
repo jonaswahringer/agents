@@ -28,24 +28,39 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
+  agents / setup    14 of 79 selected
+  Creators  1 jonasw  2 mattp  3 pstack
+
   [x] Global config
-  [-] Skills
-      [x] jonasw
-    > [-] mattp
+  [-] Skills  14/79
+      [-] jonasw  12/13
+    > [-] mattp  2/22
           [x] ask-matt
           [ ] code-review
           [x] codebase-design
           ...
-      [ ] pstack
+      [ ] pstack  0/44
 ```
 
 Skills are grouped in folders named after whoever wrote them. Use the arrow keys to
-move, Space to toggle an item, and Enter to install.
+move, Space to toggle an item, and Enter to save and install. `agents skill` is an
+alias for `agents skills`.
 
+- Press a creator's number to jump directly to it, such as `2` for `mattp` or `3`
+  for `pstack`. Numbers follow the folders found on disk and appear above the list.
+- Press a creator's first letter to jump to it, such as `m` for `mattp`. When
+  creators share an initial, repeating the letter cycles between them.
+- Tab jumps to the next creator, and Shift+Tab jumps to the previous one.
 - Moving onto a folder lists the skills inside it, and moving away closes it again.
+- Long folders scroll within the terminal, keeping the cursor and controls visible.
+  Home/End jump to the first/last item, and Page Up/Down move a page at a time.
 - Toggling a folder selects or clears every skill in it.
 - Toggling `Skills` selects or clears everything.
 - A `[-]` mark means only some of the skills below are selected.
+- `q`, Escape, or Ctrl+C cancels without saving changes.
+
+The menu highlights the current row and shows selected totals for each folder.
+Set `NO_COLOR=1` to disable styling. Leaving the menu restores the terminal.
 
 The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
 
