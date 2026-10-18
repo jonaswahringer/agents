@@ -44,6 +44,7 @@ Usage:
   agents configure           Edit the saved global configuration
   agents source              Show where agents runs from and how global config links
   agents skills              Choose installed skills
+  agents skill               Alias for agents skills
   agents skills add NAME     Add one skill without changing other selections
   agents skills sync FOLDER  Merge copied skills from their upstream repository
   agents skills source       Show the skills folder and each skill's links
@@ -406,67 +407,67 @@ build_rows() {
   done
 }
 
-row_folder() {
-  local index="$1"
-  case "${ROW_KIND[$index]}" in
-    category) printf '%s\n' "${ROW_VALUE[$index]}" ;;
-    skill) printf '%s\n' "${ROW_VALUE[$index]%%/*}" ;;
-    *) printf '\n' ;;
-  esac
-}
-
 # A folder lists its skills while the cursor is inside it, so the menu stays short.
 # A cursor of -1 opens every folder, which is what the menu snapshot needs.
 row_visible() {
   local index="$1" cursor="$2"
   [[ "${ROW_KIND[$index]}" == "skill" ]] || return 0
   [[ $cursor -lt 0 ]] && return 0
-  [[ "$(row_folder "$index")" == "$(row_folder "$cursor")" ]]
+  [[ "${ROW_VALUE[$index]%%/*}" == "${ROW_VALUE[$cursor]%%/*}" ]]
+}
+
+render_menu_row() {
+  local index="$1" cursor="$2" details="${3:-0}" kind label mark level indent prefix suffix=""
+  kind="${ROW_KIND[$index]}"
+  case "$kind" in
+    config)
+      level=0; label="Global config"
+      mark=" "; [[ $CONFIG_SELECTED -eq 1 ]] && mark="x"
+      ;;
+    all)
+      level=0; label="Skills"
+      [[ $details -eq 0 ]] || suffix="  ${#SELECTED[@]}/${#SKILLS[@]}"
+      if all_skills_selected; then
+        mark="x"
+      elif [[ ${#SELECTED[@]} -gt 0 ]]; then
+        mark="-"
+      else
+        mark=" "
+      fi
+      ;;
+    category)
+      level=1; label="${ROW_VALUE[$index]}"
+      [[ $details -eq 0 ]] || suffix="  $(category_selected_count "$label")/$(category_total "$label")"
+      if category_fully_selected "$label"; then
+        mark="x"
+      elif [[ "$(category_selected_count "$label")" -gt 0 ]]; then
+        mark="-"
+      else
+        mark=" "
+      fi
+      ;;
+    *)
+      level=2; label="${ROW_VALUE[$index]##*/}"
+      mark=" "; has_selected "${ROW_VALUE[$index]}" && mark="x"
+      ;;
+  esac
+  indent=$((2 + level * 4))
+  prefix="$(printf '%*s' "$indent" '')"
+  [[ $cursor -eq $index ]] && prefix="$(printf '%*s> ' "$((indent - 2))" '')"
+  if [[ $details -eq 1 ]]; then
+    menu_line "$prefix[$mark] $label$suffix" "$([[ $cursor -eq $index ]] && printf active)"
+  else
+    printf '%s[%s] %s\n' "$prefix" "$mark" "$label"
+  fi
 }
 
 render_menu() {
-  local with_config="$1" cursor="$2" index=0 kind label mark level indent prefix
+  local with_config="$1" cursor="$2" index=0
   build_rows "$with_config"
   while [[ $index -lt ${#ROW_KIND[@]} ]]; do
-    if ! row_visible "$index" "$cursor"; then
-      index=$((index + 1))
-      continue
+    if row_visible "$index" "$cursor"; then
+      render_menu_row "$index" "$cursor"
     fi
-    kind="${ROW_KIND[$index]}"
-    case "$kind" in
-      config)
-        level=0; label="Global config"
-        mark=" "; [[ $CONFIG_SELECTED -eq 1 ]] && mark="x"
-        ;;
-      all)
-        level=0; label="Skills"
-        if all_skills_selected; then
-          mark="x"
-        elif [[ ${#SELECTED[@]} -gt 0 ]]; then
-          mark="-"
-        else
-          mark=" "
-        fi
-        ;;
-      category)
-        level=1; label="${ROW_VALUE[$index]}"
-        if category_fully_selected "$label"; then
-          mark="x"
-        elif [[ "$(category_selected_count "$label")" -gt 0 ]]; then
-          mark="-"
-        else
-          mark=" "
-        fi
-        ;;
-      *)
-        level=2; label="${ROW_VALUE[$index]##*/}"
-        mark=" "; has_selected "${ROW_VALUE[$index]}" && mark="x"
-        ;;
-    esac
-    indent=$((2 + level * 4))
-    prefix="$(printf '%*s' "$indent" '')"
-    [[ $cursor -eq $index ]] && prefix="$(printf '%*s> ' "$((indent - 2))" '')"
-    printf '%s[%s] %s\n' "$prefix" "$mark" "$label"
     index=$((index + 1))
   done
 }
@@ -511,33 +512,175 @@ toggle_row() {
   esac
 }
 
+# Tab moves between creators without walking through their skills. Letters cycle
+# through creators with that initial; numbers select their position on disk.
+creator_row() {
+  local cursor="$1" direction="$2" initial="${3:-}" next steps=0
+  next="$cursor"
+  while [[ $steps -lt ${#ROW_KIND[@]} ]]; do
+    next=$(((next + direction + ${#ROW_KIND[@]}) % ${#ROW_KIND[@]}))
+    steps=$((steps + 1))
+    [[ "${ROW_KIND[$next]}" == category ]] || continue
+    if [[ -z "$initial" || "${ROW_VALUE[$next]:0:1}" == "$initial" ]]; then
+      printf '%s\n' "$next"
+      return
+    fi
+  done
+  printf '%s\n' "$cursor"
+}
+
+menu_line() {
+  local line="$1" style="${2:-}" escape=""
+  if [[ ${#line} -gt $menu_columns ]]; then
+    line="${line:0:$((menu_columns - 3))}..."
+  fi
+  if [[ -z "${NO_COLOR:-}" && "${TERM:-}" != dumb ]]; then
+    case "$style" in
+      active) escape=$'\033[7m' ;;
+      heading) escape=$'\033[1m' ;;
+      muted) escape=$'\033[2m' ;;
+    esac
+  fi
+  printf '%s%s\033[0m\033[K\r\n' "$escape" "$line"
+}
+
+# Keep the active row visible, including inside folders taller than the terminal.
+# Locals in interactive_menu hold the viewport and terminal size between frames.
+render_menu_frame() {
+  local cursor="$1" with_config="$2" index position=0 active=0 first last capacity shortcuts="  Creators" number=0 size
+  local title=skills action=save
+  local visible=()
+  if [[ $with_config -eq 1 ]]; then title=setup; action=continue; fi
+  size="$(stty size <&9)"
+  read -r menu_lines menu_columns <<< "$size"
+  [[ "$menu_lines" =~ ^[0-9]+$ && $menu_lines -gt 0 ]] || menu_lines=24
+  [[ "$menu_columns" =~ ^[0-9]+$ && $menu_columns -gt 3 ]] || menu_columns=80
+  for ((index = 0; index < ${#ROW_KIND[@]}; index++)); do
+    if row_visible "$index" "$cursor"; then
+      [[ $index -ne $cursor ]] || active="${#visible[@]}"
+      visible+=("$index")
+    fi
+  done
+  # Leave the last terminal line unused so its newline cannot scroll the frame.
+  capacity=$((menu_lines - 9))
+  [[ $capacity -gt 0 ]] || capacity=1
+  [[ $menu_top -le $active ]] || menu_top="$active"
+  [[ $active -lt $((menu_top + capacity)) ]] || menu_top=$((active - capacity + 1))
+  if [[ $menu_top -gt 0 && $((menu_top + capacity)) -gt ${#visible[@]} ]]; then
+    menu_top=$((${#visible[@]} - capacity))
+    [[ $menu_top -ge 0 ]] || menu_top=0
+  fi
+  first="$menu_top"
+  last=$((first + capacity))
+  [[ $last -le ${#visible[@]} ]] || last="${#visible[@]}"
+  for index in "${CATEGORIES[@]}"; do
+    number=$((number + 1))
+    if [[ $number -le 9 ]]; then
+      shortcuts="$shortcuts  $number $index"
+    else
+      shortcuts="$shortcuts  $index"
+    fi
+  done
+
+  printf '\033[H'
+  menu_line "  agents / $title    ${#SELECTED[@]} of ${#SKILLS[@]} selected" heading
+  menu_line "$shortcuts" muted
+  menu_line ""
+  for ((position = first; position < last; position++)); do
+    render_menu_row "${visible[$position]}" "$cursor" 1
+  done
+  menu_line ""
+  menu_line "  Rows $((first + 1))-$last of ${#visible[@]}" muted
+  menu_line "  ↑↓ move  Space toggle  Enter $action"
+  menu_line "  Tab/Shift+Tab creator  1-9/letter jump"
+  menu_line "  q / Esc cancel" muted
+  printf '\033[J'
+}
+
+menu_cleanup() {
+  stty "$menu_terminal_state" <&9
+  printf '\033[0m\033[?25h\033[?1049l' >&9
+  exec 9>&-
+}
+
 interactive_menu() {
-  local with_config="$1" cursor=0 key
+  local with_config="$1" cursor=0 key sequence part index number result=1 redraw=1
+  local menu_top=0 menu_lines=24 menu_columns=80 menu_terminal_state
   [[ -r /dev/tty && -w /dev/tty ]] || die "interactive setup needs a terminal; use --all or --skills"
   build_rows "$with_config"
   [[ ${#ROW_KIND[@]} -gt 0 ]] || return 0
 
+  exec 9<> /dev/tty
+  menu_terminal_state="$(stty -g <&9)"
+  trap 'menu_cleanup' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
+  trap 'redraw=1' WINCH
+  stty -echo -icanon -isig -ixon min 1 time 0 <&9
+  printf '\033[?1049h\033[?25l\033[2J' >&9
   while true; do
-    printf '\033[2J\033[H' > /dev/tty
-    printf 'Choose what agents should manage.\n\n' > /dev/tty
-    render_menu "$with_config" "$cursor" > /dev/tty
-    printf '\nUse ↑/↓ to move, Space to toggle, and Enter to continue.\n' > /dev/tty
-
-    IFS= read -rsn1 key < /dev/tty
+    if [[ $redraw -eq 1 ]]; then
+      redraw=0
+      render_menu_frame "$cursor" "$with_config" >&9
+    fi
+    # A timeout lets Bash 3.2 dispatch signals even while waiting on /dev/tty.
+    if IFS= read -rsn1 -t 1 key <&9; then
+      redraw=1
+    else
+      # Bash 3.2 also returns 1 for a timeout. A disconnected terminal exits
+      # through the HUP trap; an idle terminal should keep waiting.
+      continue
+    fi
     if [[ "$key" == $'\033' ]]; then
-      IFS= read -rsn2 key < /dev/tty || true
-      [[ "$key" == "[A" ]] && cursor="$(next_row "$cursor" -1)"
-      [[ "$key" == "[B" ]] && cursor="$(next_row "$cursor" 1)"
-    elif [[ "$key" == " " ]]; then
-      toggle_row "$cursor"
-    elif [[ -z "$key" ]]; then
-      printf '\033[2J\033[H' > /dev/tty
-      return 0
-    elif [[ "$key" == "q" ]]; then
-      printf '\033[2J\033[H' > /dev/tty
-      return 1
+      # Bash 3.2 accepts whole-second read timeouts. A lone Escape cancels;
+      # complete CSI/SS3 sequences are consumed so their tails cannot toggle rows.
+      sequence=""
+      for ((index = 0; index < 6; index++)); do
+        IFS= read -rsn1 -t 1 part <&9 || break
+        sequence="$sequence$part"
+        [[ "$sequence" == '[' || "$sequence" == O ]] && continue
+        [[ "$part" == [a-zA-Z~] ]] && break
+      done
+      case "$sequence" in
+        '') break ;;
+        '[A'|OA) cursor="$(next_row "$cursor" -1)" ;;
+        '[B'|OB) cursor="$(next_row "$cursor" 1)" ;;
+        '[Z') cursor="$(creator_row "$cursor" -1)" ;;
+        '[H'|OH|'[1~') cursor=0 ;;
+        '[F'|OF|'[4~') cursor=$((${#ROW_KIND[@]} - 1)) ;;
+        '[5~'|'[6~')
+          number=-1; [[ "$sequence" != '[6~' ]] || number=1
+          for ((index = 0; index < menu_lines - 9; index++)); do
+            cursor="$(next_row "$cursor" "$number")"
+          done
+          ;;
+      esac
+    else
+      case "$key" in
+        ' ') toggle_row "$cursor" ;;
+        '') result=0; break ;;
+        q|$'\004') break ;;
+        $'\003') exit 130 ;;
+        $'\t') cursor="$(creator_row "$cursor" 1)" ;;
+        [1-9])
+          number=0
+          for ((index = 0; index < ${#ROW_KIND[@]}; index++)); do
+            [[ "${ROW_KIND[$index]}" == category ]] || continue
+            number=$((number + 1))
+            if [[ $number -eq $key ]]; then cursor="$index"; break; fi
+          done
+          ;;
+        [a-zA-Z])
+          key="$(printf '%s' "$key" | tr '[:upper:]' '[:lower:]')"
+          cursor="$(creator_row "$cursor" 1 "$key")"
+          ;;
+      esac
     fi
   done
+  menu_cleanup
+  trap - EXIT INT TERM HUP WINCH
+  return "$result"
 }
 
 # Counts what an update just made available but did not install, so a new folder in
@@ -1321,7 +1464,7 @@ case "${1:-help}" in
   update) shift; update_command "$@" ;;
   configure) shift; discover_skills; load_selected; parse_install_options "$@"; CONFIG_SELECTED=1; ensure_global_response_skill; configure_global; save_global_state; sync_skills ;;
   source) shift; [[ $# -eq 0 ]] || die "usage: agents source"; load_global_state; source_report ;;
-  skills) shift; skills_command "$@" ;;
+  skill|skills) shift; skills_command "$@" ;;
   doctor) shift; doctor_command "$@" ;;
   help|-h|--help) usage ;;
   *) usage >&2; exit 1 ;;
