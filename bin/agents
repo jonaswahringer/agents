@@ -255,6 +255,7 @@ resolve_skill() {
   local wanted="$1" skill matches=""
   case "$wanted" in
     nice-to-read|jonasw/nice-to-read) wanted="jonasw/nice" ;;
+    minj/c4-explorer) wanted="jonasw/c4-explorer" ;;
   esac
   for skill in "${SKILLS[@]}"; do
     if [[ "$skill" == "$wanted" || "${skill##*/}" == "$wanted" ]]; then

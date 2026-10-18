@@ -394,6 +394,25 @@ assert_link "$MIGRATE_HOME/.claude/skills/nice"
 assert_link "$MIGRATE_HOME/.codex/skills/nice"
 assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice"
 
+# Moving the explorer to its author folder preserves saved selections and repairs
+# managed links from the original folder, while its public name stays the same.
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" skills add minj/c4-explorer >/dev/null
+printf 'jonasw/nice\nminj/c4-explorer\n' > "$MIGRATE_HOME/.config/agents/selected-skills"
+rm "$MIGRATE_HOME/.agents/skills/c4-explorer"
+ln -s "$MIGRATE_ROOT/skills/minj/c4-explorer" "$MIGRATE_HOME/.agents/skills/c4-explorer"
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update > "$TEST_ROOT/c4-update.txt"
+assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/nice"
+assert_contains "$MIGRATE_HOME/.config/agents/selected-skills" "jonasw/c4-explorer"
+assert_not_contains "$MIGRATE_HOME/.config/agents/selected-skills" "minj/c4-explorer"
+assert_link "$MIGRATE_HOME/.agents/skills/c4-explorer"
+assert_link "$MIGRATE_HOME/.claude/skills/c4-explorer"
+assert_link "$MIGRATE_HOME/.codex/skills/c4-explorer"
+[[ "$(readlink "$MIGRATE_HOME/.agents/skills/c4-explorer")" == "$MIGRATE_ROOT/skills/jonasw/c4-explorer" ]] || fail "explorer link should point to jonasw"
+HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" _menu_snapshot > "$TEST_ROOT/c4-menu.txt"
+assert_contains "$TEST_ROOT/c4-menu.txt" "[x] c4-explorer"
+assert_not_contains "$TEST_ROOT/c4-menu.txt" "[ ] minj"
+assert_not_contains "$TEST_ROOT/c4-menu.txt" "[x] minj"
+
 # An update says how many skills it left out, so a new folder does not arrive silently.
 assert_contains "$TEST_ROOT/update.txt" "more skills are available. Run 'agents skills' to choose them."
 if ! HOME="$MIGRATE_HOME" "$MIGRATE_HOME/.local/bin/agents" update --bogus 2>/dev/null; then

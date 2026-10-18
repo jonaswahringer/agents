@@ -230,12 +230,9 @@ Skills live under `skills/<folder>/<name>/SKILL.md`. The folder names whoever wr
 them, so you can take one person's set without reading through the rest. Adding a
 folder to the repository is enough to make it appear in the menu.
 
-### `minj`
-
-- `c4-explorer` explores repository architecture through source-backed C4 diagrams, traced behaviors, and animated drill-down. Includes reusable HTML, CSS, JavaScript, and an offline builder for demos and project models.
-
 ### `jonasw`
 
+- `c4-explorer` explores repository architecture through source-backed C4 diagrams, traced behaviors, and animated drill-down. Includes reusable HTML, CSS, JavaScript, and an offline builder for demos and project models.
 - `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
 - `executive-summary` writes you an executive summary with the bottom line first, so you can stop after one sentence.
 - `furnace` turns spare weekly allowance into reviewable work, with a persistent idea backlog and task history.
@@ -269,6 +266,8 @@ Saved `nice-to-read` selections migrate to `jonasw/nice` during installation or
 update. The old managed links are removed. `pstack/unslop` remains available for
 explicit prose editing, but the global instructions no longer require it for every
 response.
+
+Saved `minj/c4-explorer` selections migrate to `jonasw/c4-explorer` on update.
 
 ## Development
 
