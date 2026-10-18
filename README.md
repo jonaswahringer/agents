@@ -61,6 +61,8 @@ alias for `agents skills`.
 
 The menu highlights the current row and shows selected totals for each folder.
 Set `NO_COLOR=1` to disable styling. Leaving the menu restores the terminal.
+After saving, `Updating skills ...` animates until installation finishes. The
+animation pauses for file replacement prompts and clears before the result.
 
 The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
 
