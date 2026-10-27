@@ -24,7 +24,7 @@ Choose effort separately for the lead and every child. Use low for mechanical in
 
 ## Approved models and controls
 
-The runtime catalog was checked on 2026-10-11. IDs below are runtime IDs, not entitlement claims.
+The T3 runtime catalog was checked on 2026-10-25. IDs below are runtime IDs, not entitlement claims.
 
 | Model | Runtime ID | Allowed effort | Role |
 |---|---|---|---|
@@ -34,9 +34,9 @@ The runtime catalog was checked on 2026-10-11. IDs below are runtime IDs, not en
 | GPT-6 Astra | `gpt-6-astra` | low–ultra | GPT lead and orchestration |
 | GPT-6.1 Sol | `gpt-6.1-sol` | low–ultra | GPT investigation, review, verification; lightweight child at low |
 | GPT-6 Luna | `gpt-6-luna` | low–max | Lightweight inventory and extraction at low–medium |
-| Claude Haiku 5.5 | Not exposed in the current T3 catalog | low–max when available | Lightweight child when available |
+| Claude Haiku 5.5 | `claude-haiku-5-5` | low–max | Lightweight child when available |
 
-The current T3 runtime catalog does not expose Haiku 5.5. It exposes Haiku 4.5 without an effort control, but Haiku 4.5 is blacklisted and must not be used as a substitute. When Haiku 5.5 cannot run, use GPT-6 Luna at low–medium or GPT-6.1 Sol at low for lightweight inventory and extraction. The GPT child may not author a mergeable edit.
+The current T3 runtime catalog exposes Haiku 5.5 and its low–max effort control. It also exposes Haiku 4.5 without an effort control, but Haiku 4.5 is blacklisted and must not be used as a substitute. When Haiku 5.5 cannot run, use GPT-6 Luna at low–medium or GPT-6.1 Sol at low for lightweight inventory and extraction. The GPT child may not author a mergeable edit.
 
 ## Blacklist
 
