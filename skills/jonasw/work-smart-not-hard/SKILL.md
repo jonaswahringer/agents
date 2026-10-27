@@ -38,26 +38,6 @@ The T3 runtime catalog was checked on 2026-10-25. IDs below are runtime IDs, not
 
 The current T3 runtime catalog exposes Haiku 5.5 and its low–max effort control. It also exposes Haiku 4.5 without an effort control, but Haiku 4.5 is blacklisted and must not be used as a substitute. When Haiku 5.5 cannot run, use GPT-6 Luna at low–medium or GPT-6.1 Sol at low for lightweight inventory and extraction. The GPT child may not author a mergeable edit.
 
-## Current cost signals
-
-Artificial Analysis Intelligence Index v4.3.2 provides comparable task-cost and intelligence signals for the exact effort variants shown below. Prices are public API prices in USD per million input/output tokens. Cost per task is the weighted cost of one Artificial Analysis Intelligence Index task. Neither measure represents subscription capacity or the cost of our actual workflow.
-
-| Model | Index range across evaluated efforts | Cost per Index task across evaluated efforts | API input/output per 1M tokens |
-|---|---:|---:|---:|
-| Claude Opus 5.5 | 42–58 | $0.55–$5.98 | $4 / $20 |
-| Claude Sonnet 5.5 | 36–56 | $0.35–$5.46 | $2 / $10 |
-| Claude Fable 5.1 | 47–51 | $2.37–$3.91 (low–high only) | $10 / $50 |
-| GPT-6 Astra | 46–53 | $0.82–$3.26 | $10 / $50 |
-| GPT-6.1 Sol | 42–52 | $0.13–$0.72 | $2 / $10 |
-| GPT-6 Luna | 18–38 | $0.0045–$0.07 | $0.10 / $0.50 |
-| Claude Haiku 5.5 | 29–43 | $0.02–$0.21 | $0.10 / $0.50 |
-
-These ranges combine distinct effort variants, not one recommended setting. Select effort for the task and role; use the index as a broad capability signal. Terminal-Bench 4.0 and AutomationBench-AA can inform coding and agentic-work choices, while AA-Briefcase and GDPval-AA cover knowledge-work tasks. The index does not directly measure UI/UX quality, investigation quality, code review, verification, or T3 orchestration. Do not generalize one benchmark to those tasks.
-
-Artificial Analysis lists GPT-6.1 Sol's cost-efficient frontier position within its evaluated pool. Slopalytics' current comparison shows the same selected model families and effort variants on an Intelligence Index versus cost-per-task chart, with a logarithmic cost axis and a Pareto line control. Its visible page has no data-refresh timestamp; its benchmark data is attributed to Artificial Analysis. Check the underlying Artificial Analysis release and benchmark pages before relying on a plotted value.
-
-Sources checked 2026-10-25: [Artificial Analysis model releases](https://artificialanalysis.ai/models/releases), [Intelligence Index v4.3.2](https://artificialanalysis.ai/evaluations/artificial-analysis-intelligence-index), [Slopalytics](https://slopalytics.com/).
-
 ## Blacklist
 
 Never select these as a parent, child, or fallback:
