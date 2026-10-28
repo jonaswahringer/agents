@@ -258,7 +258,8 @@ folder to the repository is enough to make it appear in the menu.
 - `hyperframes-promo` creates product promos under the project's `marketing/` folder, defaults to 60 fps, ignores media files in Git, and delivers videos through comms over Tailscale.
 - `nice` makes user-facing answers concise, plain, direct, and honest about evidence.
 - `note` captures a durable note from the current conversation.
-- `pair` pair-programs with you driving and the agent navigating, keeping taste calls with you and asking what you think before it explains.
+- `pair` pair-programs with you driving and the agent navigating, settling the plan in rounds of questions before you code, keeping taste calls with you, asking what you think before it explains, and ending with an optional understanding check and a private learning record.
+- `quiz` quizzes you on concepts from earlier `pair` sessions, weakest first, with one hint at a time and misses retested, and records how it went.
 - `research-ricky` researches complex and technical concepts.
 - `rnd` explores an idea before committing to a direction.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
