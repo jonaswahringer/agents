@@ -144,10 +144,11 @@ awk '
     print "Apply the `unslop` skill to every response you write. Before sending any user-facing text, follow its process to strip AI-writing patterns and keep a human voice."
     next
   }
-  $0 == "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements." {
-    print "Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks."
+  $0 ~ /^Write top-down: / {
+    print "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements."
     next
   }
+  $0 == "Use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements." { next }
   { print }
 ' "$TEST_HOME/.agents/AGENTS.md" > "$TEST_HOME/.agents/AGENTS.md.tmp"
 mv "$TEST_HOME/.agents/AGENTS.md.tmp" "$TEST_HOME/.agents/AGENTS.md"
@@ -155,6 +156,10 @@ printf '\nA personal line that updates must preserve.\n' >> "$TEST_HOME/.agents/
 "$AGENTS" update >/dev/null
 assert_contains "$TEST_HOME/.agents/AGENTS.md" "A personal line that updates must preserve."
 assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `nice` skill to every user-facing response.'
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Write top-down: the outcome in the first line, then a short overview, then detail only as deep as I need.'
+assert_contains "$TEST_HOME/.agents/AGENTS.md" 'Use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements.'
+assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Lead with the outcome, use plain words'
+"$AGENTS" doctor >/dev/null || fail "doctor should pass after update migrates the response instructions"
 assert_contains "$TEST_HOME/.agents/AGENTS.md" 'When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat.'
 assert_not_contains "$TEST_HOME/.agents/AGENTS.md" 'Apply the `unslop` skill to every response'
 

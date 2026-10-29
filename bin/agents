@@ -872,8 +872,11 @@ migrate_managed_global_config() {
       print "Apply the `nice` skill to every user-facing response."
       next
     }
-    $0 == "Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks." {
-      print "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements."
+    $0 == "Write so I can read the answer once and understand it. Lead with the outcome, use plain words, and state failed or skipped checks." ||
+    $0 == "Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements." {
+      print "Write top-down: the outcome in the first line, then a short overview, then detail only as deep as I need. Never send a wall of text. Split anything longer than a few sentences into short sections and lists, use a table to compare items, a diagram for flows or structure, and an interactive HTML page when I need to explore many items or options."
+      print ""
+      print "Use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements."
       next
     }
     $0 == "When you need user input, use the available user-input tool. Use an asynchronous tool when useful work can continue while waiting. If the answer is required before proceeding, wait for it before doing dependent work. If no user-input tool is available, ask in chat." { has_user_input_rule = 1 }
