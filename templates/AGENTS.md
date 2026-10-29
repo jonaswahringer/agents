@@ -36,6 +36,8 @@ Show the commit message and ask before running `git commit`. Ask again before pu
 
 Apply the `nice` skill to every user-facing response.
 
-Lead with the outcome, use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements.
+Write top-down: the outcome in the first line, then a short overview, then detail only as deep as I need. Never send a wall of text. Split anything longer than a few sentences into short sections and lists, use a table to compare items, a diagram for flows or structure, and an interactive HTML page when I need to explore many items or options.
+
+Use plain words, and honestly report failed, skipped, or unverified checks. Do not invent missing requirements.
 
 Plan non-trivial work before making large changes. Keep me informed while the work is in progress.
