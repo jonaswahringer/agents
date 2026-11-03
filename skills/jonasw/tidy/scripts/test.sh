@@ -53,7 +53,10 @@ quiet_git -C "$REPO" worktree add -b outside "$TEST_ROOT/elsewhere/outside"
 
 echo changed > "$TREES/dirty/file.txt"
 mkdir -p "$TREES/noise/__pycache__" "$TREES/noise/node_modules/pkg"
-touch "$TREES/noise/__pycache__/cache.pyc" "$TREES/noise/.DS_Store" "$TREES/noise/node_modules/pkg/index.js"
+touch "$TREES/noise/.DS_Store"
+# Real content, so build_kb has sizes to add up: 40 KB untracked, 80 KB ignored.
+head -c 40960 /dev/zero > "$TREES/noise/__pycache__/cache.pyc"
+head -c 81920 /dev/zero > "$TREES/noise/node_modules/pkg/index.js"
 echo two > "$TREES/ahead/file.txt"
 quiet_git -C "$TREES/ahead" commit -am two
 echo three > "$TREES/nopr/file.txt"
@@ -104,8 +107,8 @@ touch -t 202001010001 "$TEST_ROOT/marker"
 AFTER="$(git -C "$REPO" worktree list --porcelain; GIT_OPTIONAL_LOCKS=0 git -C "$TREES/dirty" status --porcelain)"
 [ "$BEFORE" = "$AFTER" ] || fail "scan changed repository state"
 
-awk -F'\t' 'NF != 17 && $1 != "orphan" && $1 != "gone" && $1 != "unknown" { exit 1 }' "$TEST_ROOT/scan.tsv" \
-  || fail "a checkout row lacks 17 columns"
+awk -F'\t' 'NF != 19 && $1 != "orphan" && $1 != "gone" && $1 != "unknown" { exit 1 }' "$TEST_ROOT/scan.tsv" \
+  || fail "a checkout row lacks 19 columns"
 
 # expect PATH COLUMN VALUE, where COLUMN is a header name.
 expect() {
@@ -128,6 +131,10 @@ expect "$TREES/dirty" dirty 1
 expect "$TREES/dirty" dirty_sample file.txt
 expect "$TREES/noise" dirty 0
 expect "$TREES/noise" noise 3
+expect "$TREES/merged" build_kb 0
+noise_kb="$(du -sk "$TREES/noise/__pycache__" "$TREES/noise/.DS_Store" "$TREES/noise/node_modules" | awk '{ n += $1 } END { print n }')"
+[ "$noise_kb" -ge 120 ] || fail "test setup: build noise is only ${noise_kb} KB"
+expect "$TREES/noise" build_kb "$noise_kb"
 expect "$TREES/noise" ignored 0
 expect "$TREES/envcopy" ignored 0
 expect "$TREES/envunique" ignored 1
@@ -150,8 +157,9 @@ expect "$TEST_ROOT/elsewhere/outside" kind outside
 expect "$TREES/gone" kind gone
 expect "$TREES/orphan" kind orphan
 expect "$TREES/screenshots" kind unknown
+expect "$TREES/merged" locked no
 
-old_days="$(awk -F'\t' -v p="$TREES/old" '$2 == p { print $16 }' "$TEST_ROOT/scan.tsv")"
+old_days="$(awk -F'\t' -v p="$TREES/old" 'NR == 1 { for (i = 1; i <= NF; i++) if ($i == "active_days") n = i } $2 == p { print $n }' "$TEST_ROOT/scan.tsv")"
 [ "${old_days:-0}" -gt 1000 ] || fail "$TREES/old: expected active_days above 1000, got '$old_days'"
 
 /bin/bash "$SCAN" --fetch "$ROOT" > "$TEST_ROOT/fetch.tsv" 2>/dev/null
@@ -181,4 +189,64 @@ expect "$TREES/squashed" pr - "$TEST_ROOT/gh.tsv"
 /bin/bash "$SCAN" --depth 2 "$TREES" > "$TEST_ROOT/one.tsv"
 grep -q "	$REPO	" "$TEST_ROOT/one.tsv" || fail "a root of worktrees alone does not resolve their repo"
 
-echo "tidy scan: all checks passed"
+
+/bin/bash "$SCAN" --exact "$ROOT" > "$TEST_ROOT/exact.tsv"
+! grep -q -e '^outside' -e '^gone' -e '^unknown' "$TEST_ROOT/exact.tsv" || fail "--exact lists rows outside the roots"
+
+# Removal runs on a repository dated 2020, so its worktrees are not recent.
+REMOVE="$SKILL_ROOT/scripts/remove-worktree.sh"
+STALE="$TEST_ROOT/stale repo"
+STALE_TREES="$TEST_ROOT/stale-trees"
+old_git init "$STALE"
+printf '.env\nnode_modules/\n' > "$STALE/.gitignore"
+old_git -C "$STALE" add .
+old_git -C "$STALE" commit -m base
+for name in noise dirty env locked busy; do
+  old_git -C "$STALE" worktree add -b "$name" "$STALE_TREES/$name"
+done
+old_git -C "$STALE" worktree add --detach "$STALE_TREES/detached"
+echo only-here > "$STALE_TREES/detached/work.txt"
+old_git -C "$STALE_TREES/detached" add work.txt
+old_git -C "$STALE_TREES/detached" commit -m "only here"
+quiet_git -C "$STALE" worktree add -b fresh "$STALE_TREES/fresh"
+mkdir -p "$STALE_TREES/noise/__pycache__" "$STALE_TREES/noise/node_modules/pkg"
+touch "$STALE_TREES/noise/__pycache__/cache.pyc" "$STALE_TREES/noise/node_modules/pkg/index.js"
+echo changed > "$STALE_TREES/dirty/.gitignore"
+printf 'SECRET=only-here\n' > "$STALE_TREES/env/.env"
+quiet_git -C "$STALE" worktree lock "$STALE_TREES/locked"
+(cd "$STALE_TREES/busy" && exec sleep 60) &
+BUSY=$!
+disown "$BUSY"
+
+/bin/bash "$SCAN" --exact "$STALE_TREES" > "$TEST_ROOT/stale.tsv"
+expect "$STALE_TREES/locked" locked yes "$TEST_ROOT/stale.tsv"
+
+/bin/bash "$REMOVE" "$STALE_TREES/noise" > "$TEST_ROOT/removed.txt" || fail "removing a stale worktree with only build noise exited non-zero"
+[ ! -e "$STALE_TREES/noise" ] || fail "the stale worktree with only build noise is still there"
+git -C "$STALE" show-ref --verify -q refs/heads/noise || fail "removal deleted the branch"
+restore="$(sed -n 's/.*restore: //p' "$TEST_ROOT/removed.txt")"
+eval "$restore" >/dev/null 2>&1 || fail "the printed restore command failed: $restore"
+[ -d "$STALE_TREES/noise" ] || fail "the restore command did not bring the worktree back"
+
+set +e
+/bin/bash "$REMOVE" "$STALE_TREES/dirty" "$STALE_TREES/env" "$STALE_TREES/locked" "$STALE_TREES/busy" \
+  "$STALE_TREES/detached" "$STALE_TREES/fresh" "$STALE" "$STALE_TREES/missing" > "$TEST_ROOT/skipped.txt"
+status=$?
+set -e
+kill "$BUSY" 2>/dev/null || true
+[ "$status" -eq 1 ] || fail "skipped removals exited with $status, expected 1"
+
+skipped() {
+  grep -q "^skipped $1  $2" "$TEST_ROOT/skipped.txt" || fail "$1: expected skip reason '$2', got: $(grep -F "$1" "$TEST_ROOT/skipped.txt")"
+  [ -e "$1" ] || [ "$1" = "$STALE_TREES/missing" ] || fail "$1 was skipped but deleted"
+}
+skipped "$STALE_TREES/dirty" "has 1 uncommitted"
+skipped "$STALE_TREES/env" "has 1 git-ignored"
+skipped "$STALE_TREES/locked" "locked"
+skipped "$STALE_TREES/busy" "in use"
+skipped "$STALE_TREES/detached" "detached HEAD"
+skipped "$STALE_TREES/fresh" "active 0 days ago"
+skipped "$STALE" "kind is main"
+skipped "$STALE_TREES/missing" "not a directory"
+
+echo "tidy scan and removal: all checks passed"

@@ -9,7 +9,7 @@ set -u
 
 usage() {
   cat <<'EOF'
-Usage: scan-worktrees.sh [--fetch] [--gh] [--depth N] [ROOT...]
+Usage: scan-worktrees.sh [--fetch] [--gh] [--depth N] [--exact] [ROOT...]
 
 Searches each ROOT for git checkouts, then adds every other worktree that the
 repositories it found know about. Default roots: ~/.t3/worktrees ~/Projects
@@ -17,6 +17,8 @@ repositories it found know about. Default roots: ~/.t3/worktrees ~/Projects
   --fetch    fetch origin once per repository first, so "merged" is current
   --gh       look up pull requests for branches with unmerged commits
   --depth N  how deep to search each root (default 4)
+  --exact    list only checkouts found under the roots: no outside, gone,
+             or unknown rows
 
 Columns:
   kind            main, worktree, outside (a worktree of a scanned repository
@@ -26,7 +28,10 @@ Columns:
   path            the checkout
   repo            the main checkout, the place to run `git worktree` commands
   branch          the checked-out branch, or (detached)
-  size_kb         disk usage
+  size_kb         disk usage as du counts it
+  build_kb        the part of size_kb in build noise. Package managers such
+                  as bun and pnpm often clone or link these files from a shared
+                  store, so removing them can free far less than this
   dirty           tracked changes plus untracked files that are not build noise
   dirty_sample    up to three of those paths
   ignored         git-ignored files that are neither build noise nor exact
@@ -42,6 +47,7 @@ Columns:
                   none, or - when not looked up
   remote          fresh (fetched now), stale (fetch failed), skipped (no
                   --fetch), or none (no origin)
+  locked          yes when `git worktree lock` protects it
   active_days     days since the last commit, checkout, or reset in this worktree
   procs           processes whose working directory is inside the checkout
 EOF
@@ -50,6 +56,7 @@ EOF
 FETCH=0
 GH=0
 DEPTH=4
+EXACT=0
 ROOTS=""
 NL='
 '
@@ -67,6 +74,7 @@ while [ $# -gt 0 ]; do
       DEPTH="$2"
       shift
       ;;
+    --exact) EXACT=1 ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
     *) ROOTS="$ROOTS$1$NL" ;;
@@ -159,6 +167,7 @@ SEEN_CHECKOUTS=""
 SEEN_REPOS=""
 REPO_REMOTES=""
 OUTSIDE=""
+LOCKED=""
 WORKTREE_PARENTS=""
 GONE_ROWS=""
 
@@ -191,6 +200,7 @@ visit_repo() {
         if [ "$first" -eq 0 ]; then OUTSIDE="$OUTSIDE$path$NL"; fi
         first=0
         ;;
+      locked*) LOCKED="$LOCKED$path$NL" ;;
       prunable*) GONE_ROWS="$GONE_ROWS$(row gone "$path" "$repo")$NL" ;;
     esac
   done <<EOF
@@ -239,7 +249,7 @@ EOF
 
 scan_checkout() {
   local dir="$1" kind="$2" gitdir common repo branch head def ahead merged pushed pr status line entry
-  local dirty=0 noise=0 ignored=0 dirty_sample="" ignored_sample=""
+  local locked build_kb=0 dirty=0 noise=0 ignored=0 dirty_sample="" ignored_sample=""
 
   if [ -d "$dir/.git" ]; then
     kind=main
@@ -279,6 +289,7 @@ scan_checkout() {
       "!! "*)
         if is_noise "$entry"; then
           noise=$((noise + 1))
+          build_kb=$((build_kb + $(size_kb "$dir/$entry")))
         elif [ "$kind" != main ] && [ -d "$repo/.git" ] && is_copy_of_main "$repo" "$dir" "$entry"; then
           :
         else
@@ -290,6 +301,7 @@ scan_checkout() {
       "?? "*)
         if is_noise "$entry"; then
           noise=$((noise + 1))
+          build_kb=$((build_kb + $(size_kb "$dir/$entry")))
           continue
         fi
         ;;
@@ -322,17 +334,20 @@ EOF
     pushed=yes
   fi
 
+  locked=no
+  if in_set "$dir" "$LOCKED"; then locked=yes; fi
+
   pr="-"
   if [ "$GH" -eq 1 ] && [ "$merged" != yes ] && [ "$merged" != content ] && [ "$branch" != "(detached)" ]; then
     pr="$(pr_state "$dir" "$branch" "$head")"
   fi
 
-  row "$kind" "$dir" "$repo" "$branch" "$(size_kb "$dir")" "$dirty" "$dirty_sample" \
+  row "$kind" "$dir" "$repo" "$branch" "$(size_kb "$dir")" "$build_kb" "$dirty" "$dirty_sample" \
     "$ignored" "$ignored_sample" "$noise" "$ahead" "$merged" "$pushed" "$pr" \
-    "$(repo_remote "$repo")" "$(active_days "$dir")" "$(procs_in "$dir")"
+    "$(repo_remote "$repo")" "$locked" "$(active_days "$dir")" "$(procs_in "$dir")"
 }
 
-printf 'kind\tpath\trepo\tbranch\tsize_kb\tdirty\tdirty_sample\tignored\tignored_sample\tnoise\tahead\tmerged\tpushed\tpr\tremote\tactive_days\tprocs\n'
+printf 'kind\tpath\trepo\tbranch\tsize_kb\tbuild_kb\tdirty\tdirty_sample\tignored\tignored_sample\tnoise\tahead\tmerged\tpushed\tpr\tremote\tlocked\tactive_days\tprocs\n'
 
 while IFS= read -r root; do
   [ -n "$root" ] || continue
@@ -354,6 +369,8 @@ EOF
 done <<EOF
 $ROOTS
 EOF
+
+[ "$EXACT" -eq 0 ] || exit 0
 
 # Worktrees of the scanned repositories that live outside the roots.
 while IFS= read -r dir; do
