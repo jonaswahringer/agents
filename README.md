@@ -261,6 +261,7 @@ folder to the repository is enough to make it appear in the menu.
 - `pair` pair-programs with you driving and the agent navigating, keeping taste calls with you and asking what you think before it explains.
 - `research-ricky` researches complex and technical concepts.
 - `rnd` explores an idea before committing to a direction.
+- `tidy` finds stale git worktrees across projects or under one folder, shows what each one would cost to restore, and removes only the ones you approve.
 - `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
 
 ### `mattp`
