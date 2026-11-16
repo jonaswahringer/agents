@@ -1,0 +1,13 @@
+# Copied skills. See docs/skills-sync.md for the manifest format.
+repository	https://github.com/t3dotgg/tstack.git
+ref	main
+commit	11e37a74d0a6868c121cd0910ab2b3bd9873b92a
+skill	babysit-pr	skills/babysit-pr
+skill	council	skills/council
+skill	file-pr	skills/file-pr
+skill	full-send	skills/full-send
+skill	full-stop	skills/full-stop
+skill	leaving-pr-comments	skills/leaving-pr-comments
+skill	modernize	skills/modernize
+skill	sol-loop	skills/sol-loop
+skill	takeover	skills/takeover
