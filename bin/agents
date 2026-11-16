@@ -30,7 +30,9 @@ NON_INTERACTIVE=0
 CONFIG_SELECTED=1
 SELECTED=()
 SKILLS=()
+SKILL_DESCRIPTIONS=()
 CATEGORIES=()
+MENU_OPEN=()
 ROW_KIND=()
 ROW_VALUE=()
 SHOW_SKILL_PROGRESS=0
@@ -391,34 +393,39 @@ all_skills_selected() {
   [[ ${#SKILLS[@]} -gt 0 && ${#SELECTED[@]} -eq ${#SKILLS[@]} ]]
 }
 
+# ROW_GROUP holds each row's position in CATEGORIES, and ROW_DESC a skill's
+# description once load_skill_descriptions has run.
 build_rows() {
-  local with_config="$1" category skill
+  local with_config="$1" group index
   ROW_KIND=()
   ROW_VALUE=()
+  ROW_GROUP=()
+  ROW_DESC=()
   if [[ "$with_config" == 1 ]]; then
-    ROW_KIND+=("config"); ROW_VALUE+=("")
+    ROW_KIND+=("config"); ROW_VALUE+=(""); ROW_GROUP+=(""); ROW_DESC+=("")
   fi
-  ROW_KIND+=("all"); ROW_VALUE+=("")
-  for category in "${CATEGORIES[@]}"; do
-    ROW_KIND+=("category"); ROW_VALUE+=("$category")
-    for skill in "${SKILLS[@]}"; do
-      [[ "${skill%%/*}" == "$category" ]] || continue
-      ROW_KIND+=("skill"); ROW_VALUE+=("$skill")
+  ROW_KIND+=("all"); ROW_VALUE+=(""); ROW_GROUP+=(""); ROW_DESC+=("")
+  for ((group = 0; group < ${#CATEGORIES[@]}; group++)); do
+    ROW_KIND+=("category"); ROW_VALUE+=("${CATEGORIES[$group]}"); ROW_GROUP+=("$group"); ROW_DESC+=("")
+    for ((index = 0; index < ${#SKILLS[@]}; index++)); do
+      [[ "${SKILLS[$index]%%/*}" == "${CATEGORIES[$group]}" ]] || continue
+      ROW_KIND+=("skill"); ROW_VALUE+=("${SKILLS[$index]}"); ROW_GROUP+=("$group")
+      ROW_DESC+=("${SKILL_DESCRIPTIONS[$index]:-}")
     done
   done
 }
 
-# A folder lists its skills while the cursor is inside it, so the menu stays short.
-# A cursor of -1 opens every folder, which is what the menu snapshot needs.
+# A folder lists its skills while it is expanded; MENU_OPEN holds that state per
+# creator. A cursor of -1 opens every folder, which is what the menu snapshot needs.
 row_visible() {
   local index="$1" cursor="$2"
   [[ "${ROW_KIND[$index]}" == "skill" ]] || return 0
   [[ $cursor -lt 0 ]] && return 0
-  [[ "${ROW_VALUE[$index]%%/*}" == "${ROW_VALUE[$cursor]%%/*}" ]]
+  [[ "${MENU_OPEN[${ROW_GROUP[$index]}]:-0}" -eq 1 ]]
 }
 
 render_menu_row() {
-  local index="$1" cursor="$2" details="${3:-0}" kind label mark level indent prefix suffix=""
+  local index="$1" cursor="$2" kind label mark level indent prefix
   kind="${ROW_KIND[$index]}"
   case "$kind" in
     config)
@@ -427,7 +434,6 @@ render_menu_row() {
       ;;
     all)
       level=0; label="Skills"
-      [[ $details -eq 0 ]] || suffix="  ${#SELECTED[@]}/${#SKILLS[@]}"
       if all_skills_selected; then
         mark="x"
       elif [[ ${#SELECTED[@]} -gt 0 ]]; then
@@ -438,7 +444,6 @@ render_menu_row() {
       ;;
     category)
       level=1; label="${ROW_VALUE[$index]}"
-      [[ $details -eq 0 ]] || suffix="  $(category_selected_count "$label")/$(category_total "$label")"
       if category_fully_selected "$label"; then
         mark="x"
       elif [[ "$(category_selected_count "$label")" -gt 0 ]]; then
@@ -455,11 +460,7 @@ render_menu_row() {
   indent=$((2 + level * 4))
   prefix="$(printf '%*s' "$indent" '')"
   [[ $cursor -eq $index ]] && prefix="$(printf '%*s> ' "$((indent - 2))" '')"
-  if [[ $details -eq 1 ]]; then
-    menu_line "$prefix[$mark] $label$suffix" "$([[ $cursor -eq $index ]] && printf active)"
-  else
-    printf '%s[%s] %s\n' "$prefix" "$mark" "$label"
-  fi
+  printf '%s[%s] %s\n' "$prefix" "$mark" "$label"
 }
 
 render_menu() {
@@ -473,8 +474,7 @@ render_menu() {
   done
 }
 
-# Skips rows hidden inside a closed folder. Visibility is judged from where the
-# cursor is now, so leaving a folder lands on the next folder rather than its skills.
+# Skips rows hidden inside a collapsed folder.
 next_row() {
   local cursor="$1" delta="$2" count="${#ROW_KIND[@]}" next steps=0
   next="$cursor"
@@ -513,8 +513,30 @@ toggle_row() {
   esac
 }
 
-# Tab moves between creators without walking through their skills. Letters cycle
-# through creators with that initial; numbers select their position on disk.
+# Right expands a folder, or steps into one that is already open. Left collapses
+# the folder the cursor is in and moves the cursor onto it, so it never sits on
+# a hidden row. Prints the new cursor; the caller updates MENU_OPEN.
+fold_row() {
+  local cursor="$1" direction="$2" index
+  if [[ -z "${ROW_GROUP[$cursor]}" ]]; then
+    printf '%s\n' "$cursor"
+    return
+  fi
+  if [[ $direction -gt 0 ]]; then
+    if [[ "${ROW_KIND[$cursor]}" == category && "${MENU_OPEN[${ROW_GROUP[$cursor]}]:-0}" -eq 1 ]]; then
+      cursor=$((cursor + 1))
+    fi
+    printf '%s\n' "$cursor"
+    return
+  fi
+  for ((index = cursor; index > 0; index--)); do
+    [[ "${ROW_KIND[$index]}" != category ]] || break
+  done
+  printf '%s\n' "$index"
+}
+
+# Letters cycle through creators with that initial; numbers select their
+# position on disk.
 creator_row() {
   local cursor="$1" direction="$2" initial="${3:-}" next steps=0
   next="$cursor"
@@ -530,85 +552,402 @@ creator_row() {
   printf '%s\n' "$cursor"
 }
 
-menu_line() {
-  local line="$1" style="${2:-}" escape=""
-  if [[ ${#line} -gt $menu_columns ]]; then
-    line="${line:0:$((menu_columns - 3))}..."
+# Glyphs and colors for the interactive menu. Colors come from the terminal's own
+# palette, so they follow light and dark themes. NO_COLOR or TERM=dumb drops all
+# styling, and a locale that is not UTF-8 gets ASCII glyphs.
+menu_styles() {
+  local probe='…'
+  if [[ ${#probe} -eq 1 ]]; then
+    MENU_UNICODE=1
+    G_CURSOR='❯'; G_OPEN='▾'; G_SHUT='▸'; G_UP='↑'; G_DOWN='↓'; G_RULE='─'; G_MORE='…'; G_MOVE='↑↓'; G_FOLD='←→'; G_DONE='✓'
+    G_SPIN=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  else
+    MENU_UNICODE=0
+    G_CURSOR='>'; G_OPEN='-'; G_SHUT='+'; G_UP='^'; G_DOWN='v'; G_RULE='-'; G_MORE='...'; G_MOVE='up/down'; G_FOLD='left/right'; G_DONE='OK'
+    G_SPIN=('|' '/' '-' '\')
   fi
+  S_RESET=''; S_BOLD=''; S_DIM=''; S_PLAIN=''; S_LINE=''; S_UNLINE=''
+  S_ACCENT=''; S_ON=''; S_SOME=''; S_TEXT=''; S_BAR=''; S_BAR_TEXT=''
   if [[ -z "${NO_COLOR:-}" && "${TERM:-}" != dumb ]]; then
-    case "$style" in
-      active) escape=$'\033[7m' ;;
-      heading) escape=$'\033[1m' ;;
-      muted) escape=$'\033[2m' ;;
+    S_RESET=$'\033[0m'; S_BOLD=$'\033[1m'; S_DIM=$'\033[2m'; S_PLAIN=$'\033[22m'
+    S_LINE=$'\033[4m'; S_UNLINE=$'\033[24m'
+    S_ACCENT=$'\033[36m'; S_ON=$'\033[32m'; S_SOME=$'\033[33m'; S_TEXT=$'\033[39m'; S_BAR_TEXT="$S_TEXT"
+    # A full-width bar needs 256 colors. Other terminals mark the row with the
+    # cursor glyph and bold text, because reverse video turns colored marks into blocks.
+    case "${TERM:-} ${COLORTERM:-}" in
+      *256color*|*truecolor*|*24bit*)
+        S_BAR=$'\033[48;5;236m\033[38;5;255m'; S_BAR_TEXT=$'\033[38;5;255m'
+        ;;
     esac
   fi
-  printf '%s%s\033[0m\033[K\r\n' "$escape" "$line"
+}
+
+# Descriptions are only needed by the menu, so they load when it opens. One awk
+# pass reads them all; folded and quoted YAML collapse to a single line.
+load_skill_descriptions() {
+  SKILL_DESCRIPTIONS=()
+  [[ ${#SKILLS[@]} -gt 0 ]] || return 0
+  local skill line
+  local files=()
+  for skill in "${SKILLS[@]}"; do
+    files+=("$ROOT/skills/$skill/SKILL.md")
+  done
+  while IFS= read -r line; do
+    SKILL_DESCRIPTIONS+=("$line")
+  done < <(awk '
+    function finish(value) {
+      gsub(/[[:space:]]+/, " ", value)
+      sub(/^ /, "", value)
+      sub(/ $/, "", value)
+      if (value ~ /^[>|][+-]?( |$)/) sub(/^[>|][+-]? ?/, "", value)
+      if (substr(value, 1, 1) == "\"") {
+        value = substr(value, 2)
+        sub(/"[[:space:]]*$/, "", value)
+        gsub(/\\"/, "\"", value)
+      } else if (substr(value, 1, 1) == "\047") {
+        value = substr(value, 2)
+        sub(/\047[[:space:]]*$/, "", value)
+        gsub(/\047\047/, "\047", value)
+      }
+      print value
+    }
+    FNR == 1 { if (NR > 1) finish(text); text = ""; inside = ($0 == "---"); capture = 0; next }
+    !inside { next }
+    $0 == "---" { inside = 0; capture = 0; next }
+    capture && /^[[:space:]]/ { text = text " " $0; next }
+    { capture = 0 }
+    /^description:/ { text = $0; sub(/^description:/, "", text); capture = 1 }
+    END { if (NR > 0) finish(text) }
+  ' "${files[@]}" | if [[ $MENU_UNICODE -eq 1 ]]; then cat; else LC_ALL=C tr -d '\200-\377'; fi)
+}
+
+# Shortens text to a width, ending in an ellipsis, into menu_fitted. Results go
+# through globals because a subshell per row would make every keypress slower.
+menu_fit() {
+  local text="$1" width="$2"
+  if [[ $width -le 0 ]]; then
+    menu_fitted=""
+  elif [[ ${#text} -le $width ]]; then
+    menu_fitted="$text"
+  elif [[ $width -le ${#G_MORE} ]]; then
+    menu_fitted="${text:0:$width}"
+  else
+    menu_fitted="${text:0:$((width - ${#G_MORE}))}"
+    menu_fitted="${menu_fitted%" "}$G_MORE"
+  fi
+}
+
+# Word-wraps text into at most `limit` lines of MENU_WRAPPED.
+menu_wrap() {
+  local text="$1" width="$2" limit="$3" line="" word index
+  local words=()
+  MENU_WRAPPED=()
+  read -ra words <<< "$text"
+  for ((index = 0; index < ${#words[@]}; index++)); do
+    word="${words[$index]}"
+    if [[ -z "$line" ]]; then
+      line="$word"
+    elif [[ $((${#line} + 1 + ${#word})) -le $width ]]; then
+      line="$line $word"
+    elif [[ $((${#MENU_WRAPPED[@]} + 1)) -lt $limit ]]; then
+      MENU_WRAPPED+=("$line")
+      line="$word"
+    else
+      menu_fit "$line $word$G_MORE" "$width"
+      line="$menu_fitted"
+      [[ "$line" == *"$G_MORE" ]] || line="$line$G_MORE"
+      break
+    fi
+  done
+  [[ -z "$line" ]] || MENU_WRAPPED+=("$line")
+  return 0
+}
+
+# Two folders can ship the same skill name, and only the first selected one is
+# installed. Sets menu_note when this row loses that name to another selection.
+menu_skill_note() {
+  local skill="$1" name="${1##*/}" other first=""
+  menu_note=""
+  for other in "${SELECTED[@]}"; do
+    if [[ "${other##*/}" == "$name" ]]; then
+      first="$other"
+      break
+    fi
+  done
+  [[ -n "$first" && "$first" != "$skill" ]] || return 0
+  if has_selected "$skill"; then
+    menu_note="skipped, $first installs '$name'"
+  else
+    menu_note="$first installs '$name'"
+  fi
+}
+
+# Counts selected skills per creator once per frame.
+menu_counts() {
+  local group skill
+  MENU_TOTAL=()
+  MENU_PICKED=()
+  for ((group = 0; group < ${#CATEGORIES[@]}; group++)); do
+    MENU_TOTAL[group]=0
+    MENU_PICKED[group]=0
+    for skill in "${SKILLS[@]}"; do
+      [[ "${skill%%/*}" != "${CATEGORIES[$group]}" ]] || MENU_TOTAL[group]=$((MENU_TOTAL[group] + 1))
+    done
+    for skill in "${SELECTED[@]}"; do
+      [[ "${skill%%/*}" != "${CATEGORIES[$group]}" ]] || MENU_PICKED[group]=$((MENU_PICKED[group] + 1))
+    done
+  done
+}
+
+# Draws one row into menu_text, padded to the content width so the active bar
+# spans the whole line. Widths are counted on the unstyled text.
+menu_item() {
+  local index="$1" cursor="$2" name_width="$3" kind value label mark=" " mark_style="$S_DIM"
+  local tree="" note="" note_style="$S_DIM" count="" picked="" total="" text="$S_TEXT" bar=""
+  local lead="  " label_style="" used room pad
+  kind="${ROW_KIND[$index]}"
+  value="${ROW_VALUE[$index]}"
+  menu_note=""
+  if [[ $index -eq $cursor ]]; then
+    text="$S_BAR_TEXT"; bar="$S_BAR"; lead="$G_CURSOR "; label_style="$S_BOLD"
+  fi
+  case "$kind" in
+    config)
+      label="Global config"; note="Shared AGENTS.md for Claude Code and Codex"; name_width=0
+      [[ $CONFIG_SELECTED -eq 0 ]] || mark=x
+      ;;
+    all)
+      label="Skills"; label_style="$S_BOLD"; picked="${#SELECTED[@]}"; total="${#SKILLS[@]}"
+      ;;
+    category)
+      label="$value"; label_style="$S_BOLD"
+      picked="${MENU_PICKED[${ROW_GROUP[$index]}]}"; total="${MENU_TOTAL[${ROW_GROUP[$index]}]}"
+      tree="  $G_SHUT "
+      [[ "${MENU_OPEN[${ROW_GROUP[$index]}]:-0}" -ne 1 ]] || tree="  $G_OPEN "
+      ;;
+    *)
+      label="${value##*/}"; tree="    "
+      note="${ROW_DESC[$index]%%. *}"; note="${note%.}"
+      has_selected "$value" && mark=x
+      menu_skill_note "$value"
+      if [[ -n "$menu_note" ]]; then
+        note="$menu_note"
+        [[ "$mark" != x ]] || note_style="$S_SOME"
+      fi
+      ;;
+  esac
+  if [[ -n "$total" ]]; then
+    count="$picked/$total"
+    if [[ $total -gt 0 && $picked -eq $total ]]; then
+      mark=x
+    elif [[ $picked -gt 0 ]]; then
+      mark=-
+    fi
+  fi
+  case "$mark" in
+    x) mark_style="$S_ON$S_BOLD" ;;
+    -) mark_style="$S_SOME$S_BOLD" ;;
+  esac
+  [[ -z "$menu_note" || "$mark" != x ]] || mark_style="$S_SOME$S_BOLD"
+
+  used=$((${#lead} + ${#tree} + 4))
+  room=$((menu_width - used))
+  menu_text="$bar$S_ACCENT$S_BOLD$lead$S_PLAIN$text$S_DIM$tree$S_PLAIN$text$mark_style[$mark]$S_PLAIN$text "
+  if [[ -n "$count" ]]; then
+    menu_fit "$label" $((room - ${#count} - 2))
+    pad=$((room - ${#menu_fitted} - ${#count}))
+    [[ $pad -ge 0 ]] || { count=""; pad=$((room - ${#menu_fitted})); }
+    printf -v pad '%*s' "$pad" ''
+    menu_text="$menu_text$label_style$menu_fitted$S_PLAIN$text$pad$S_DIM$count$S_PLAIN$text"
+  else
+    [[ $name_width -gt 0 ]] || name_width="${#label}"
+    [[ $name_width -le $room ]] || name_width="$room"
+    menu_fit "$label" "$name_width"
+    menu_text="$menu_text$label_style$menu_fitted$S_PLAIN$text"
+    used=$((used + ${#menu_fitted}))
+    # A description needs enough room to say something; narrow terminals drop it.
+    if [[ -n "$note" && $((menu_width - used - (name_width - ${#menu_fitted}) - 2)) -ge 12 ]]; then
+      used=$((used + name_width - ${#menu_fitted} + 2))
+      printf -v pad '%*s' $((name_width - ${#menu_fitted} + 2)) ''
+      menu_text="$menu_text$pad"
+      menu_fit "$note" $((menu_width - used))
+      menu_text="$menu_text$note_style$menu_fitted$S_PLAIN$text"
+      used=$((used + ${#menu_fitted}))
+    fi
+    if [[ $used -lt $menu_width ]]; then
+      printf -v pad '%*s' $((menu_width - used)) ''
+      menu_text="$menu_text$pad"
+    fi
+  fi
+  menu_text="$menu_text$S_RESET"
+}
+
+# The longest skill name in the open folders, so descriptions start in one column.
+menu_name_width() {
+  local index value widest=0
+  for ((index = 0; index < ${#ROW_KIND[@]}; index++)); do
+    [[ "${ROW_KIND[$index]}" == skill ]] || continue
+    [[ "${MENU_OPEN[${ROW_GROUP[$index]}]:-0}" -eq 1 ]] || continue
+    value="${ROW_VALUE[$index]##*/}"
+    [[ ${#value} -le $widest ]] || widest="${#value}"
+  done
+  [[ $widest -le 24 ]] || widest=24
+  menu_widest="$widest"
+}
+
+# Explains the active row in the space under the list.
+menu_details() {
+  local index="$1" value="${ROW_VALUE[$1]}"
+  case "${ROW_KIND[$index]}" in
+    config) menu_detail="Writes ~/.agents/AGENTS.md from your profile answers and links it for Claude Code and Codex. Also selects jonasw/nice." ;;
+    all) menu_detail="Space selects or clears every skill. Selected skills are linked for agents, Claude Code, and Codex." ;;
+    category) menu_detail="${MENU_TOTAL[${ROW_GROUP[$index]}]} skills by $value. Space selects or clears all of them." ;;
+    *)
+      menu_detail="${ROW_DESC[$index]}"
+      menu_skill_note "$value"
+      [[ -z "$menu_note" ]] || menu_detail="$menu_note. $menu_detail"
+      ;;
+  esac
+}
+
+menu_emit() {
+  printf '  %s\033[K\r\n' "$1"
 }
 
 # Keep the active row visible, including inside folders taller than the terminal.
 # Locals in interactive_menu hold the viewport and terminal size between frames.
 render_menu_frame() {
-  local cursor="$1" with_config="$2" index position=0 active=0 first last capacity shortcuts="  Creators" number=0 size
-  local title=skills action=save
-  local visible=()
+  local cursor="$1" with_config="$2" index position=0 active=0 first last size hint line piece number=0
+  local title=skills action=save top=0 detail_lines=0 room group="${ROW_GROUP[$1]}" tabs="" tabs_width=0 rule=""
+  local visible=() hints=() lines=()
   if [[ $with_config -eq 1 ]]; then title=setup; action=continue; fi
   size="$(stty size <&9)"
   read -r menu_lines menu_columns <<< "$size"
   [[ "$menu_lines" =~ ^[0-9]+$ && $menu_lines -gt 0 ]] || menu_lines=24
   [[ "$menu_columns" =~ ^[0-9]+$ && $menu_columns -gt 3 ]] || menu_columns=80
+  menu_width=$((menu_columns - 4))
+  [[ $menu_width -ge 20 ]] || menu_width=20
+  menu_counts
+
+  # Key hints wrap onto as many lines as the width needs.
+  hints=("$G_MOVE|move" "$G_FOLD|collapse/expand" "space|toggle" "enter|$action" "q|cancel")
+  line=""; piece=""
+  for hint in "${hints[@]}"; do
+    if [[ -n "$piece" && $((${#piece} + 3 + ${#hint} - 1)) -gt $menu_width ]]; then
+      lines+=("$line"); line=""; piece=""
+    fi
+    [[ -z "$piece" ]] || { line="$line   "; piece="$piece   "; }
+    line="$line$S_BOLD${hint%%|*}$S_PLAIN $S_DIM${hint#*|}$S_PLAIN"
+    piece="$piece${hint%%|*} ${hint#*|}"
+  done
+  lines+=("$line")
+  # Tall terminals get a top margin, and room to describe the active row.
+  [[ $menu_lines -lt 20 ]] || { top=1; detail_lines=3; }
+
   for ((index = 0; index < ${#ROW_KIND[@]}; index++)); do
     if row_visible "$index" "$cursor"; then
       [[ $index -ne $cursor ]] || active="${#visible[@]}"
       visible+=("$index")
     fi
   done
-  # Leave the last terminal line unused so its newline cannot scroll the frame.
-  capacity=$((menu_lines - 9))
-  [[ $capacity -gt 0 ]] || capacity=1
+  # Header, tabs, both scroll hints, and the rule take five lines; the detail
+  # area ends in a blank line. The last terminal line stays unused so its
+  # newline cannot scroll the frame.
+  menu_capacity=$((menu_lines - 6 - top - detail_lines - ${#lines[@]}))
+  [[ $menu_capacity -gt 0 ]] || menu_capacity=1
   [[ $menu_top -le $active ]] || menu_top="$active"
-  [[ $active -lt $((menu_top + capacity)) ]] || menu_top=$((active - capacity + 1))
-  if [[ $menu_top -gt 0 && $((menu_top + capacity)) -gt ${#visible[@]} ]]; then
-    menu_top=$((${#visible[@]} - capacity))
+  [[ $active -lt $((menu_top + menu_capacity)) ]] || menu_top=$((active - menu_capacity + 1))
+  if [[ $menu_top -gt 0 && $((menu_top + menu_capacity)) -gt ${#visible[@]} ]]; then
+    menu_top=$((${#visible[@]} - menu_capacity))
     [[ $menu_top -ge 0 ]] || menu_top=0
   fi
   first="$menu_top"
-  last=$((first + capacity))
+  last=$((first + menu_capacity))
   [[ $last -le ${#visible[@]} ]] || last="${#visible[@]}"
-  for index in "${CATEGORIES[@]}"; do
-    number=$((number + 1))
-    if [[ $number -le 9 ]]; then
-      shortcuts="$shortcuts  $number $index"
-    else
-      shortcuts="$shortcuts  $index"
-    fi
-  done
 
   printf '\033[H'
-  menu_line "  agents / $title    ${#SELECTED[@]} of ${#SKILLS[@]} selected" heading
-  menu_line "$shortcuts" muted
-  menu_line ""
-  for ((position = first; position < last; position++)); do
-    render_menu_row "${visible[$position]}" "$cursor" 1
+  [[ $top -eq 0 ]] || menu_emit ""
+  hint="${#SELECTED[@]} of ${#SKILLS[@]} selected"
+  line="$S_ACCENT${S_BOLD}agents$S_PLAIN$S_DIM / $S_PLAIN$S_TEXT$S_BOLD$title$S_RESET"
+  piece="agents / $title"
+  if [[ $((${#piece} + 2 + ${#hint})) -le $menu_width ]]; then
+    printf -v piece '%*s' $((menu_width - ${#piece} - ${#hint})) ''
+    line="$line$piece$S_BOLD${#SELECTED[@]}$S_PLAIN$S_DIM${hint#"${#SELECTED[@]}"}$S_RESET"
+  fi
+  menu_emit "$line"
+
+  # Creators, numbered for their shortcut. The one holding the cursor is lit.
+  for ((index = 0; index < ${#CATEGORIES[@]}; index++)); do
+    number=$((index + 1))
+    piece="${CATEGORIES[$index]}"
+    [[ $number -le 9 ]] && piece="$number $piece"
+    [[ $index -eq 0 ]] || piece="  $piece"
+    # Stop early enough to fit an ellipsis when more creators follow.
+    room=$menu_width
+    [[ $index -eq $((${#CATEGORIES[@]} - 1)) ]] || room=$((menu_width - ${#G_MORE} - 2))
+    if [[ $((tabs_width + ${#piece})) -gt $room ]]; then
+      tabs="$tabs$S_DIM  $G_MORE$S_PLAIN"
+      break
+    fi
+    tabs_width=$((tabs_width + ${#piece}))
+    [[ $index -eq 0 ]] || tabs="$tabs  "
+    [[ $number -gt 9 ]] || tabs="$tabs$S_DIM$number$S_PLAIN "
+    if [[ "$group" == "$index" ]]; then
+      tabs="$tabs$S_ACCENT$S_BOLD$S_LINE${CATEGORIES[$index]}$S_UNLINE$S_PLAIN$S_TEXT"
+    else
+      tabs="$tabs${CATEGORIES[$index]}"
+    fi
   done
-  menu_line ""
-  menu_line "  Rows $((first + 1))-$last of ${#visible[@]}" muted
-  menu_line "  ↑↓ move  Space toggle  Enter $action"
-  menu_line "  Tab/Shift+Tab creator  1-9/letter jump"
-  menu_line "  q / Esc cancel" muted
+  menu_emit "$tabs$S_RESET"
+
+  if [[ $first -gt 0 ]]; then
+    menu_emit "$S_DIM  $G_UP $first more$S_RESET"
+  else
+    menu_emit ""
+  fi
+  menu_name_width
+  for ((position = first; position < last; position++)); do
+    menu_item "${visible[$position]}" "$cursor" "$menu_widest"
+    menu_emit "$menu_text"
+  done
+  if [[ $last -lt ${#visible[@]} ]]; then
+    menu_emit "$S_DIM  $G_DOWN $((${#visible[@]} - last)) more$S_RESET"
+  else
+    menu_emit ""
+  fi
+
+  for ((index = 0; index < menu_width; index++)); do rule="$rule$G_RULE"; done
+  menu_emit "$S_DIM$rule$S_RESET"
+  if [[ $detail_lines -gt 0 ]]; then
+    menu_details "$cursor"
+    menu_wrap "$menu_detail" "$menu_width" $((detail_lines - 1))
+    for ((index = 0; index < detail_lines; index++)); do
+      menu_emit "${MENU_WRAPPED[$index]:-}"
+    done
+  fi
+  for line in "${lines[@]}"; do
+    menu_emit "$line$S_RESET"
+  done
   printf '\033[J'
 }
 
 menu_cleanup() {
   stty "$menu_terminal_state" <&9
-  printf '\033[0m\033[?25h\033[?1049l' >&9
+  printf '\033[0m\033[?7h\033[?25h\033[?1049l' >&9
   exec 9>&-
 }
 
 interactive_menu() {
   local with_config="$1" cursor=0 key sequence part index number result=1 redraw=1
-  local menu_top=0 menu_lines=24 menu_columns=80 menu_terminal_state
+  local menu_top=0 menu_lines=24 menu_columns=80 menu_width=76 menu_capacity=10 menu_terminal_state
   [[ -r /dev/tty && -w /dev/tty ]] || die "interactive setup needs a terminal; use --all or --skills"
+  menu_styles
+  load_skill_descriptions
   build_rows "$with_config"
+  MENU_OPEN=()
+  for ((index = 0; index < ${#CATEGORIES[@]}; index++)); do
+    MENU_OPEN[index]=0
+  done
   [[ ${#ROW_KIND[@]} -gt 0 ]] || return 0
 
   exec 9<> /dev/tty
@@ -619,7 +958,9 @@ interactive_menu() {
   trap 'exit 129' HUP
   trap 'redraw=1' WINCH
   stty -echo -icanon -isig -ixon min 1 time 0 <&9
-  printf '\033[?1049h\033[?25l\033[2J' >&9
+  # Auto-wrap stays off while the menu is open, so a wide character can only
+  # clip its own line instead of pushing the frame down.
+  printf '\033[?1049h\033[?25l\033[?7l\033[2J' >&9
   while true; do
     if [[ $redraw -eq 1 ]]; then
       redraw=0
@@ -647,12 +988,24 @@ interactive_menu() {
         '') break ;;
         '[A'|OA) cursor="$(next_row "$cursor" -1)" ;;
         '[B'|OB) cursor="$(next_row "$cursor" 1)" ;;
-        '[Z') cursor="$(creator_row "$cursor" -1)" ;;
+        '[C'|OC)
+          number="${ROW_GROUP[$cursor]}"
+          cursor="$(fold_row "$cursor" 1)"
+          [[ -z "$number" ]] || MENU_OPEN[number]=1
+          ;;
+        '[D'|OD)
+          number="${ROW_GROUP[$cursor]}"
+          cursor="$(fold_row "$cursor" -1)"
+          [[ -z "$number" ]] || MENU_OPEN[number]=0
+          ;;
         '[H'|OH|'[1~') cursor=0 ;;
-        '[F'|OF|'[4~') cursor=$((${#ROW_KIND[@]} - 1)) ;;
+        '[F'|OF|'[4~')
+          cursor=$((${#ROW_KIND[@]} - 1))
+          row_visible "$cursor" 0 || cursor="$(next_row "$cursor" -1)"
+          ;;
         '[5~'|'[6~')
           number=-1; [[ "$sequence" != '[6~' ]] || number=1
-          for ((index = 0; index < menu_lines - 9; index++)); do
+          for ((index = 0; index < menu_capacity; index++)); do
             cursor="$(next_row "$cursor" "$number")"
           done
           ;;
@@ -663,7 +1016,6 @@ interactive_menu() {
         '') result=0; break ;;
         q|$'\004') break ;;
         $'\003') exit 130 ;;
-        $'\t') cursor="$(creator_row "$cursor" 1)" ;;
         [1-9])
           number=0
           for ((index = 0; index < ${#ROW_KIND[@]}; index++)); do
@@ -691,18 +1043,14 @@ start_skill_progress() {
   (
     trap - EXIT INT TERM HUP
     trap 'exit 0' TERM HUP
-    dots='..'
-    while sleep 0.3; do
-      printf '\r\033[K  Updating skills %-3s' "$dots" >&8
-      case "$dots" in
-        '.') dots='..' ;;
-        '..') dots='...' ;;
-        '...') dots='.' ;;
-      esac
+    frame=1
+    while sleep 0.1; do
+      printf '\r\033[K  %s%s%s Updating skills' "$S_ACCENT" "${G_SPIN[$frame]}" "$S_RESET" >&8
+      frame=$(((frame + 1) % ${#G_SPIN[@]}))
     done
   ) &
   skill_progress_pid=$!
-  printf '\033[?25l\r\033[K  Updating skills .  ' >&8
+  printf '\033[?25l\r\033[K  %s%s%s Updating skills' "$S_ACCENT" "${G_SPIN[0]}" "$S_RESET" >&8
 }
 
 stop_skill_progress() {
@@ -1222,7 +1570,11 @@ skills_command() {
   fi
   ensure_global_response_skill
   sync_skills
-  echo "Selected skills updated."
+  if [[ -t 1 && -n "${G_DONE:-}" ]]; then
+    printf '  %s%s%s Selected skills updated. %s selected.\n' "$S_ON" "$G_DONE" "$S_RESET" "${#SELECTED[@]}"
+  else
+    echo "Selected skills updated."
+  fi
 }
 
 # Headings are bold only on a terminal, so captured output stays plain text.

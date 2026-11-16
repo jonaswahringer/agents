@@ -28,19 +28,25 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
-  agents / setup    14 of 88 selected
-  Creators  1 jonasw  2 mattp  3 pstack  4 tstack
+  agents / setup                                                    4 of 89 selected
+  1 jonasw  2 mattp  3 pstack  4 tstack
 
-  [x] Global config
-  [-] Skills  14/88
-      [-] jonasw  12/13
-    > [-] mattp  2/22
-          [x] ask-matt
-          [ ] code-review
-          [x] codebase-design
-          ...
-      [ ] pstack  0/44
-      [ ] tstack  0/9
+    [ ] Global config  Shared AGENTS.md for Claude Code and Codex
+    [-] Skills                                                                  4/89
+      ▸ [-] jonasw                                                              2/14
+      ▾ [-] mattp                                                               2/22
+        [x] ask-matt                  Ask which skill or flow fits your situation
+  ❯     [ ] code-review               Review the changes since a fixed point (commi…
+        [x] codebase-design           Shared vocabulary for designing deep modules
+        [ ] diagnosing-bugs           Diagnosis loop for hard bugs and performance…
+        [ ] domain-modeling           Build and sharpen a project's domain model
+        [ ] find-skills               Helps users discover and install agent skills…
+    ↓ 18 more
+  ──────────────────────────────────────────────────────────────────────────────────
+  Review the changes since a fixed point (commit, branch, tag, or merge-base) along
+  two axes: Standards (does the code follow this repo's documented coding standards…
+
+  ↑↓ move   ←→ collapse/expand   space toggle   enter continue   q cancel
 ```
 
 Skills are grouped in folders named after whoever wrote them. Use the arrow keys to
@@ -51,19 +57,28 @@ alias for `agents skills`.
   for `pstack`. Numbers follow the folders found on disk and appear above the list.
 - Press a creator's first letter to jump to it, such as `m` for `mattp`. When
   creators share an initial, repeating the letter cycles between them.
-- Tab jumps to the next creator, and Shift+Tab jumps to the previous one.
-- Moving onto a folder lists the skills inside it, and moving away closes it again.
+- Folders start collapsed. Right arrow expands the folder under the cursor, and
+  pressing it again steps onto its first skill. Left arrow collapses the folder,
+  moving the cursor back onto it from one of its skills.
+- Up and down only move the cursor; they never expand or collapse a folder.
+- Each skill shows the first sentence of its description. The area under the list
+  shows the full description of the highlighted row; short terminals leave it out.
+- When two selected folders ship the same skill name, the one that loses says
+  `skipped, <folder>/<name> installs '<name>'` in yellow.
 - Long folders scroll within the terminal, keeping the cursor and controls visible.
-  Home/End jump to the first/last item, and Page Up/Down move a page at a time.
+  `↑ N more` and `↓ N more` show how much is out of view. Home/End jump to the
+  first/last item, and Page Up/Down move a page at a time.
 - Toggling a folder selects or clears every skill in it.
 - Toggling `Skills` selects or clears everything.
 - A `[-]` mark means only some of the skills below are selected.
 - `q`, Escape, or Ctrl+C cancels without saving changes.
 
-The menu highlights the current row and shows selected totals for each folder.
-Set `NO_COLOR=1` to disable styling. Leaving the menu restores the terminal.
-After saving, `Updating skills ...` animates until installation finishes. The
-animation pauses for file replacement prompts and clears before the result.
+The menu highlights the current row and the creator it belongs to, and shows
+selected totals for each folder. Colors come from the terminal's own palette.
+Set `NO_COLOR=1` to disable styling; a locale that is not UTF-8 gets ASCII
+glyphs. Leaving the menu restores the terminal. After saving, a spinner runs next
+to `Updating skills` until installation finishes. It pauses for file replacement
+prompts and clears before the result.
 
 The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
 
