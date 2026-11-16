@@ -1,7 +1,7 @@
 # Copied skills. See docs/skills-sync.md for the manifest format.
 repository	https://github.com/cursor/plugins.git
 ref	main
-commit	63d938c2e4a165a0fec1bd0f61a8e325f0cb751e
+commit	bf0c7cd80abdbf7fe47b634978a7d1b4071f71a7
 root	pstack
 skill	architect	skills/architect
 skill	arena	skills/arena
@@ -47,3 +47,17 @@ skill	technical-writing	skills/technical-writing
 skill	typescript-best-practices	skills/typescript-best-practices
 skill	unslop	skills/unslop
 skill	why	skills/why
+skill	benchmark-checklist	skills/benchmark-checklist
+skill	correct	skills/correct
+skill	create-formal-verification-skill	skills/create-formal-verification-skill
+skill	in-your-own-words	skills/in-your-own-words
+skill	ketchup-video	skills/ketchup-video
+skill	ketchup	skills/ketchup
+skill	maintain-formal-verification-skill	skills/maintain-formal-verification-skill
+skill	make-bot-ui	skills/make-bot-ui
+skill	poteto-help	skills/poteto-help
+skill	principle-attack-the-premise	skills/principle-attack-the-premise
+skill	principle-explain-the-number	skills/principle-explain-the-number
+skill	principle-test-behavior-not-implementation	skills/principle-test-behavior-not-implementation
+skill	sharpen	skills/sharpen
+skill	statechart	skills/statechart
