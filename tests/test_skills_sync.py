@@ -208,6 +208,19 @@ class SyncTests(unittest.TestCase):
         self.sync()
         self.assertEqual((self.group / 'LICENSE').read_bytes(), self.next_files['LICENSE'][0])
 
+    def test_root_row_reads_skills_from_an_upstream_folder(self):
+        nested = lambda files: {f'plugin/{path}': value for path, value in files.items()}
+        baseline = self.import_tree(nested(self.base_files), 3)
+        files = nested(self.next_files)
+        files['README.md'] = (b'outside the root\n', '100644')
+        latest = self.import_tree(files, 4)
+        self.manifest.write_text(self.manifest.read_text().replace(self.baseline, baseline) + 'root\tplugin\n')
+        self.sync()
+        self.assertEqual((self.group / 'alpha/SKILL.md').read_bytes(), skill('alpha', first='upstream edit'))
+        self.assertIn(f'commit\t{latest}\nroot\tplugin\n', self.manifest.read_text())
+        self.manifest.write_text(self.manifest.read_text().replace('root\tplugin', 'root\tmissing'))
+        self.assertIn('upstream root missing is missing', self.unchanged_after_failure())
+
 
 if __name__ == '__main__':
     unittest.main()

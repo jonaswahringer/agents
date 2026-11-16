@@ -1,6 +1,8 @@
 # Keep copied skills current
 
 `agents skills sync mattp` merges upstream changes into an agents Git checkout.
+The same command syncs any author folder with an `upstream.tsv` manifest, such as
+`pstack` or `tstack`.
 Review and commit that diff before distributing it through `agents update`.
 Syncing leaves installed selections and private profile answers alone.
 
@@ -90,6 +92,11 @@ Use actual tabs instead of `<TAB>`. Each skill can have one row. `skill` maps th
 flat local directory to its upstream directory. `local` keeps a skill outside the
 sync and candidate list. Comments begin with `#`.
 
+An optional `root` row names the upstream folder that holds `skills/` and
+`LICENSE`, for a repository that ships more than one skill set. Skill paths are then
+relative to that folder. For example, `root<TAB>pstack` reads
+`pstack/skills/statechart` as `skills/statechart`.
+
 The baseline must match the source originally copied, not today's upstream HEAD.
 Otherwise the merge cannot distinguish upstream edits from local edits. If a
 mapped skill moved since that baseline, sync locates its unique old directory by
@@ -104,5 +111,14 @@ is stored alongside the copied set and is updated through the same merge.
 The `tstack` set was copied unchanged from upstream commit
 `11e37a74d0a6868c121cd0910ab2b3bd9873b92a`, which is its baseline.
 
-Sync is manual. This change creates no recurring job. Another author, such as
-`pstack`, can use the same command once its provenance and baseline are recorded.
+The `pstack` set comes from the `pstack` folder of
+`https://github.com/cursor/plugins`, written by Lauren Tan and published under MIT.
+It was copied without a recorded commit. Its baseline is
+`63d938c2e4a165a0fec1bd0f61a8e325f0cb751e`, the latest upstream change to
+`pstack/skills` before the copy was made: all 121 files in the 44 copied skills
+match that snapshot byte for byte, and no other version of that folder does. The one
+local edit, renaming `poteto-mode`'s front matter `name` from `Poteto Mode` so it
+equals its directory, was later made upstream too.
+
+Sync is manual. This change creates no recurring job. Another author can use the
+same command once its provenance and baseline are recorded.
