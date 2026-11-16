@@ -258,7 +258,7 @@ folder to the repository is enough to make it appear in the menu.
 - `hyperframes-promo` creates product promos under the project's `marketing/` folder, defaults to 60 fps, ignores media files in Git, and delivers videos through comms over Tailscale.
 - `nice` makes user-facing answers top-down and concise, uses tables, diagrams, or interactive HTML when they read faster than prose, and stays honest about evidence.
 - `note` captures a durable note from the current conversation.
-- `pair` pair-programs with you driving and the agent navigating, keeping taste calls with you and asking what you think before it explains.
+- `pair` pairs with you on code, product, UI and UX, architecture, testing, marketing, learning, or research toward two goals: a finished artifact and your understanding of it. It pulls in a topic template, keeps taste calls with you, and checks your grasp as you go.
 - `research-ricky` researches complex and technical concepts.
 - `rnd` explores an idea before committing to a direction.
 - `tidy` finds stale git worktrees across projects or under one folder, shows what each one would cost to restore, and removes only the ones you approve.
