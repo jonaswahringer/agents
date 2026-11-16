@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 CREATORS = sorted(folder.name for folder in (ROOT / "skills").iterdir()
                   if folder.is_dir() and any(folder.glob("*/SKILL.md")))
 ANSI = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+ACTIVE = re.compile(r"(?m)^\s*[>❯] ")
 
 
 class Menu:
@@ -119,7 +120,8 @@ class SkillMenuTests(unittest.TestCase):
         return menu
 
     def assert_active(self, frame, name):
-        self.assertRegex(frame, rf"(?m)^\s*> \[[ x-]\] {re.escape(name)}(?:\s|$)")
+        # The cursor glyph is ❯ in a UTF-8 locale and > otherwise; folders add ▸/▾ or +/-.
+        self.assertRegex(frame, rf"(?m)^\s*[>❯]\s+(?:[▸▾+-] )?\[[ x-]\] {re.escape(name)}(?:\s|$)")
 
     def creator_key(self, name):
         number = CREATORS.index(name) + 1
@@ -131,14 +133,13 @@ class SkillMenuTests(unittest.TestCase):
         self.assertIn(b"\x1b[?25h", menu.output)
         self.assertIn(b"\x1b[?1049l", menu.output)
 
-    def test_creator_shortcuts_and_tab_skip_open_skills(self):
+    def test_creator_shortcuts_jump_between_folders(self):
         menu = self.menu(command="skill")
         frame = menu.frame()
         self.assertIn("  ".join(f"{number} {name}" for number, name in
                                 enumerate(CREATORS[:9], 1)), frame)
         self.assert_active(menu.frame(b"p"), "pstack")
-        self.assert_active(menu.frame(b"\t"), "jonasw")
-        self.assert_active(menu.frame(b"\x1b[Z"), "pstack")
+        self.assert_active(menu.frame(b"\t"), "pstack")
         self.assert_active(menu.frame(self.creator_key("mattp")), "mattp")
         matches = [name for name in CREATORS if name.startswith("m")]
         next_match = (matches.index("mattp") + 1) % len(matches)
@@ -151,31 +152,59 @@ class SkillMenuTests(unittest.TestCase):
         self.assertFalse((menu.config / "selected-skills").exists())
         self.assert_restored(menu)
 
+    def test_folders_start_collapsed_and_arrows_expand_and_collapse(self):
+        menu = self.menu()
+        frame = menu.frame()
+        self.assertNotIn("ask-matt", frame)
+        self.assertIn("collapse/expand", frame)
+        self.assertNotIn("tab", frame)
+        menu.frame(self.creator_key("mattp"))
+        after = CREATORS[CREATORS.index("mattp") + 1]
+        frame = menu.frame(b"\x1b[B")
+        self.assert_active(frame, after)
+        self.assertNotIn("ask-matt", frame)
+        menu.frame(b"\x1b[A")
+        frame = menu.frame(b"\x1b[C")
+        self.assert_active(frame, "mattp")
+        self.assertIn("ask-matt", frame)
+        self.assert_active(menu.frame(b"\x1b[C"), "ask-matt")
+        self.assert_active(menu.frame(b"\x1b[B"), "code-review")
+        frame = menu.frame(b"\x1b[D")
+        self.assert_active(frame, "mattp")
+        self.assertNotIn("ask-matt", frame)
+        frame = menu.frame(b"\x1b[D")
+        self.assert_active(frame, "mattp")
+        self.assertNotIn("ask-matt", frame)
+        self.assert_active(menu.frame(b"\x1b[B"), after)
+        self.assertEqual(menu.finish(), 1)
+
     def test_scroll_and_resize_keep_cursor_and_controls_visible(self):
         menu = self.menu()
         menu.frame()
         menu.frame(b"p")
+        menu.frame(b"\x1b[C")
         for _ in range(20):
             frame = menu.frame(b"\x1b[B")
             self.assertLessEqual(len(frame.splitlines()), 23)
-            self.assertIn("Enter save", frame)
-            self.assertIn("q / Esc cancel", frame)
-            self.assertEqual(frame.count("> ["), 1)
-        self.assertNotIn("Rows 1-", frame)
+            self.assertIn("enter save", frame)
+            self.assertIn("q cancel", frame)
+            self.assertEqual(len(ACTIVE.findall(frame)), 1)
+        self.assertRegex(frame, r"[↑^] \d+ more")
         fcntl.ioctl(menu.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 16, 48, 0, 0))
         os.kill(menu.pid, signal.SIGWINCH)
         frame = menu.frame()
         self.assertLessEqual(len(frame.splitlines()), 15)
         self.assertTrue(all(len(line) <= 48 for line in frame.splitlines()))
-        self.assertIn("Enter save", frame)
-        self.assertIn("q / Esc cancel", frame)
-        self.assertEqual(frame.count("> ["), 1)
+        self.assertIn("enter save", frame)
+        self.assertIn("q cancel", frame)
+        self.assertEqual(len(ACTIVE.findall(frame)), 1)
         self.assertEqual(menu.finish(), 1)
 
     def test_save_single_skill_and_preserve_existing_selection(self):
         menu = self.menu(selected=("jonasw/nice",))
         menu.frame()
         menu.frame(self.creator_key("mattp"))
+        menu.frame(b"\x1b[C")
         self.assert_active(menu.frame(b"\x1b[B"), "ask-matt")
         frame = menu.frame(b" ")
         self.assertIn("2 of ", frame)
@@ -189,15 +218,33 @@ class SkillMenuTests(unittest.TestCase):
                 self.assertTrue(link.exists(), link)
         self.assert_restored(menu)
 
-    def test_loading_dots_animate_until_installation_finishes(self):
+    def test_rows_show_descriptions_and_name_clashes(self):
+        menu = self.menu(selected=("mattp/tdd",), columns=100)
+        menu.frame()
+        menu.frame(self.creator_key("mattp"))
+        frame = menu.frame(b"\x1b[C")
+        self.assertIn("A relentless interview to sharpen a plan or design", frame)
+        menu.frame(self.creator_key("pstack"))
+        menu.frame(b"\x1b[C")
+        frame = menu.frame(b"\x1b[F")
+        while not re.search(r"(?m)^\s*[>❯]\s+\[[ x-]\] tdd\s", frame):
+            frame = menu.frame(b"\x1b[A")
+        self.assertRegex(frame, r"(?m)tdd\s+mattp/tdd installs 'tdd'")
+        frame = menu.frame(b" ")
+        self.assertRegex(frame, r"(?m)tdd\s+skipped, mattp/tdd installs 'tdd'")
+        self.assertEqual(menu.finish(), 1)
+
+    def test_loading_spinner_animates_until_installation_finishes(self):
         menu = self.menu(link_delay=0.6)
         menu.frame()
         menu.frame(self.creator_key("mattp"))
+        menu.frame(b"\x1b[C")
         menu.frame(b"\x1b[B")
         menu.frame(b" ")
         self.assertEqual(menu.finish(b"\n"), 0)
-        updates = re.findall(rb"Updating skills (\.{1,3})(?!\.)", menu.output)
-        self.assertTrue({b".", b"..", b"..."}.issubset(updates), menu.output[-2000:])
+        plain = ANSI.sub("", menu.output.decode())
+        spinner = set(re.findall(r"(\S) Updating skills", plain))
+        self.assertGreaterEqual(len(spinner), 3, plain[-2000:])
         self.assertIn(b"Selected skills updated.", menu.output)
         self.assert_restored(menu)
 
@@ -205,6 +252,7 @@ class SkillMenuTests(unittest.TestCase):
         menu = self.menu(link_delay=0.6, link_exit=23)
         menu.frame()
         menu.frame(self.creator_key("mattp"))
+        menu.frame(b"\x1b[C")
         menu.frame(b"\x1b[B")
         menu.frame(b" ")
         self.assertEqual(menu.finish(b"\n"), 23)
@@ -223,6 +271,7 @@ class SkillMenuTests(unittest.TestCase):
         existing.write_text("user-owned skill\n")
         menu.frame()
         menu.frame(self.creator_key("mattp"))
+        menu.frame(b"\x1b[C")
         menu.frame(b"\x1b[B")
         menu.frame(b" ")
         os.write(menu.fd, b"\n")
@@ -241,6 +290,7 @@ class SkillMenuTests(unittest.TestCase):
         menu = self.menu(link_delay=2)
         menu.frame()
         menu.frame(self.creator_key("mattp"))
+        menu.frame(b"\x1b[C")
         menu.frame(b"\x1b[B")
         menu.frame(b" ")
         os.write(menu.fd, b"\n")
@@ -287,9 +337,11 @@ class SkillMenuTests(unittest.TestCase):
         menu = self.menu()
         menu.frame()
         last_skill = sorted((ROOT / "skills/pstack").glob("*/SKILL.md"))[-1].parent.name
+        self.assert_active(menu.frame(b"\x1b[F"), CREATORS[-1])
+        menu.frame(b"\x1b[C")
         self.assert_active(menu.frame(b"\x1b[F"), last_skill)
         frame = menu.frame(b"\x1b[5~")
-        self.assertIn("q / Esc cancel", frame)
+        self.assertIn("q cancel", frame)
         self.assert_active(menu.frame(b"\x1b[H"), "Skills")
         frame = menu.frame(b"\x1b[3~")
         self.assert_active(frame, "Skills")
