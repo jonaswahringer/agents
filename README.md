@@ -28,11 +28,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
-  agents / setup                                                    4 of 80 selected
-  1 jonasw  2 mattp  3 pstack
+  agents / setup                                                    4 of 89 selected
+  1 jonasw  2 mattp  3 pstack  4 tstack
 
     [ ] Global config  Shared AGENTS.md for Claude Code and Codex
-    [-] Skills                                                                  4/80
+    [-] Skills                                                                  4/89
       ▸ [-] jonasw                                                              2/14
       ▾ [-] mattp                                                               2/22
         [x] ask-matt                  Ask which skill or flow fits your situation
@@ -41,7 +41,7 @@ The installer opens a keyboard menu:
         [ ] diagnosing-bugs           Diagnosis loop for hard bugs and performance…
         [ ] domain-modeling           Build and sharpen a project's domain model
         [ ] find-skills               Helps users discover and install agent skills…
-    ↓ 17 more
+    ↓ 18 more
   ──────────────────────────────────────────────────────────────────────────────────
   Review the changes since a fixed point (commit, branch, tag, or merge-base) along
   two axes: Standards (does the code follow this repo's documented coding standards…
@@ -295,6 +295,17 @@ Peter Steinberger's skills: `architect`, `arena`, `swarm`, `interrogate`,
 `technical-writing`, `typescript-best-practices`, its own `tdd` and `teach`, and a
 large set of `principle-*` skills covering one engineering principle each. Run
 `setup-pstack` once per repository.
+
+### `tstack`
+
+Theo Browne's pull request skills: `full-send` takes a change all the way to a
+merged PR, `full-stop` does the same but leaves the merge to you, `council` and
+`sol-loop` get cross-model review, and `file-pr`, `babysit-pr`, `modernize`,
+`takeover`, and `leaving-pr-comments` cover filing, watching, rebasing, finishing,
+and commenting. Some call others, so install them together: `full-send` needs
+`sol-loop`, `file-pr`, and `babysit-pr`, and `takeover` needs `modernize`.
+They need an authenticated `gh`, `python3` for `babysit-pr`, and models from other
+providers for `council` and `sol-loop`.
 
 Saved `nice-to-read` selections migrate to `jonasw/nice` during installation or
 update. The old managed links are removed. `pstack/unslop` remains available for

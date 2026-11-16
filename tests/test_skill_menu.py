@@ -140,6 +140,7 @@ class SkillMenuTests(unittest.TestCase):
                                 enumerate(CREATORS[:9], 1)), frame)
         self.assert_active(menu.frame(b"p"), "pstack")
         self.assert_active(menu.frame(b"\t"), "pstack")
+        self.assert_active(menu.frame(self.creator_key(CREATORS[-1])), CREATORS[-1])
         self.assert_active(menu.frame(self.creator_key("mattp")), "mattp")
         matches = [name for name in CREATORS if name.startswith("m")]
         next_match = (matches.index("mattp") + 1) % len(matches)
@@ -336,7 +337,7 @@ class SkillMenuTests(unittest.TestCase):
     def test_home_end_page_and_unknown_escape_sequences(self):
         menu = self.menu()
         menu.frame()
-        last_skill = sorted((ROOT / "skills/pstack").glob("*/SKILL.md"))[-1].parent.name
+        last_skill = sorted((ROOT / "skills" / CREATORS[-1]).glob("*/SKILL.md"))[-1].parent.name
         self.assert_active(menu.frame(b"\x1b[F"), CREATORS[-1])
         menu.frame(b"\x1b[C")
         self.assert_active(menu.frame(b"\x1b[F"), last_skill)
