@@ -101,5 +101,8 @@ was not in it. `resolving-merge-conflicts` and `writing-great-skills` are retain
 local copies because upstream removed or renamed them. The upstream MIT license
 is stored alongside the copied set and is updated through the same merge.
 
+The `tstack` set was copied unchanged from upstream commit
+`11e37a74d0a6868c121cd0910ab2b3bd9873b92a`, which is its baseline.
+
 Sync is manual. This change creates no recurring job. Another author, such as
 `pstack`, can use the same command once its provenance and baseline are recorded.

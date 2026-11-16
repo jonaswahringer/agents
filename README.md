@@ -28,11 +28,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
-  agents / setup    14 of 79 selected
-  Creators  1 jonasw  2 mattp  3 pstack
+  agents / setup    14 of 88 selected
+  Creators  1 jonasw  2 mattp  3 pstack  4 tstack
 
   [x] Global config
-  [-] Skills  14/79
+  [-] Skills  14/88
       [-] jonasw  12/13
     > [-] mattp  2/22
           [x] ask-matt
@@ -40,6 +40,7 @@ The installer opens a keyboard menu:
           [x] codebase-design
           ...
       [ ] pstack  0/44
+      [ ] tstack  0/9
 ```
 
 Skills are grouped in folders named after whoever wrote them. Use the arrow keys to
@@ -279,6 +280,17 @@ Peter Steinberger's skills: `architect`, `arena`, `swarm`, `interrogate`,
 `technical-writing`, `typescript-best-practices`, its own `tdd` and `teach`, and a
 large set of `principle-*` skills covering one engineering principle each. Run
 `setup-pstack` once per repository.
+
+### `tstack`
+
+Theo Browne's pull request skills: `full-send` takes a change all the way to a
+merged PR, `full-stop` does the same but leaves the merge to you, `council` and
+`sol-loop` get cross-model review, and `file-pr`, `babysit-pr`, `modernize`,
+`takeover`, and `leaving-pr-comments` cover filing, watching, rebasing, finishing,
+and commenting. Some call others, so install them together: `full-send` needs
+`sol-loop`, `file-pr`, and `babysit-pr`, and `takeover` needs `modernize`.
+They need an authenticated `gh`, `python3` for `babysit-pr`, and models from other
+providers for `council` and `sol-loop`.
 
 Saved `nice-to-read` selections migrate to `jonasw/nice` during installation or
 update. The old managed links are removed. `pstack/unslop` remains available for
