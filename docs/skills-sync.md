@@ -14,8 +14,9 @@ If the skill is already in this repository, keep your current selection and add 
 agents skills add mattp/tdd
 ```
 
-A bare name also works when it is unique. The command rejects another selected
-skill with the same plain name. Use `agents skills` to deselect that version first.
+A bare name also works when it is unique. When another selected folder ships the
+same plain name, both install under their folder names, such as `mattp-tdd` and
+`pstack-tdd`, and `tdd` lists them.
 Global configuration still requires `jonasw/nice`.
 
 On an older installation, run `agents skills`, open the author folder, and toggle

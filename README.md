@@ -96,9 +96,14 @@ Global instructions are written to:
 
 Selected skills are linked into the skill directories for agents, Claude Code, and
 Codex. A skill is linked under its own name, without the folder, because that is the
-name agents load it by. Two folders can therefore ship a skill with the same name but
-only one of them can be installed: the first selected folder wins, and `agents doctor`
-reports the other as skipped. Deselect the winner if you want the other version.
+name agents load it by. When you select skills with the same name from several
+folders, each one installs as `FOLDER-NAME`, such as `mattp-teach` and `pstack-teach`.
+The plain name `teach` then becomes a short skill that agents generates. It lists both
+skills with their descriptions and tells the agent to pick the one that fits, so skills
+and people that ask for `teach` still reach one. The renamed copy changes only the
+`name` line and links every other file to the source. `agents doctor` reports a
+generated skill that no longer matches its source as stale; `agents update` rebuilds
+it.
 
 The global instructions use `jonasw/nice`, so selecting global configuration also
 selects that skill. Other skills remain optional. The installer rejects a skill if
