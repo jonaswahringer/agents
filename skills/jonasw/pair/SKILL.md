@@ -72,7 +72,7 @@ Work in small fixed chunks: one function, one section, one screen, one diagram.
 
 1. **Predict first.** When the chunk holds a decision with a lesson, a real trade-off, pattern, or failure mode, point at the problem and ask me what I would do or what I expect, and wait. This is a nudge toward the answer, not a test.
 2. **Do the chunk**, or coach me through it if it's mine. Stop at any taste call.
-3. **Compare.** Open with my prediction: what I said, what is true, and why. Where I was right, say so in a word. Where I was off, give the why in a line or two. Name the concept, such as "N+1 query", with a one-line plain explanation, so I can look it up.
+3. **Compare.** Open with my prediction: what I said, what is true, and why. Where I was right, say so in a word. Where I was off, give the why in a line or two. Name the concept, such as "N+1 query", and explain it right here in a line or two: enough for me to decide whether we dig deeper or move on.
 4. **Explain-back.** When the chunk had a lesson, ask me to explain the chunk's key decision in my own words. This is the check: it tells you whether the chunk landed. Name any gap.
 5. **Log it.** Add each decision, its why, and its concept to the decision log.
 6. Propose the next chunk as a goal, and say where it sits in the big picture.
