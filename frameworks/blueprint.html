@@ -200,7 +200,7 @@
           <li><span class="k s">s</span> review agent, against prose rules and skills</li>
         </ul></span></div>
       <div class="row"><b>Findings</b><span>Each finding goes back to Write with its reason. None left: on to Land.</span></div>
-      <div class="row"><b>Watcher</b><span>Watches what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to dead letters, and a human is notified.</span></div>
+      <div class="row"><b>Watcher</b><span>Watches what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to dead letters, and a human is notified. The heavier the unit (criticality × urgency), the smaller its budget, so a human steps in sooner.</span></div>
       <div class="row"><b>Land</b><span>A human decides by default. A reversible class of work can be allow-listed to land on deterministic checks alone. Changes requested go back into the loop as findings. Rejected output is closed and recorded.</span></div>
       <div class="row"><b>Output</b><span>A PR, a report, an issue.</span></div>
       <div class="row"><b>Record</b><span>Every step leaves a trace of source, reasoning and decision. Where it lives is up to the mechanism: a PR, git history, an issue, or a log.</span></div>

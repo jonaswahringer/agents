@@ -49,11 +49,20 @@ Watcher: tracks tokens, time and silence in the loop. Budget spent ─► dead l
 | Gateway | The vessel's input policy, fully deterministic. **Accept** judges the unit: it declines a duplicate without new input, a superseded unit, or incomplete input (and asks for what's missing). Duplicates are found by an **idempotency key** taken from the unit, not from the run. **Start** judges the vessel: when it's overloaded or paused, the unit waits in a queue. Whether a unit belongs to this vessel is settled before it arrives, by the trigger's channel or a human route. |
 | Agent loop | The mechanism. **Write** (agents and tools) makes a change, **Verify** checks it, and each finding goes back to Write. The loop ends when no findings are left. |
 | Verify | Cheapest checks first, after poteto's pyramid: static analysis and tests (d), runtime verification (d), then a review agent checking prose rules and skills (s). Humans don't verify inside the loop; they decide at Land. A well-designed codebase makes every check cheaper. |
-| Retry budget | How much a unit may spend in the loop, measured in tokens and time. |
+| Retry budget | How much a unit may spend in the loop, measured in tokens and time. It shrinks as the unit's weight grows. |
 | Watcher | Tracks what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to the dead-letter queue. |
 | Dead-letter queue | Stuck units. A human is notified. |
 | Land | Decides whether output lands. A human decides by default. A reversible class of work can be allow-listed to land on deterministic checks alone. The allow-list is empty for now. Changes requested go back into the loop as findings; a rejected unit is closed and recorded. |
 | Record | Every vessel leaves a trace of source, reasoning and decision for each unit. Where it lives is mechanism: a PR, the code and its git history, an issue, or a log. |
+
+## Measures
+
+Lines of code say little about a unit. Two measures do:
+
+| Measure | Made of | Set by | Used for |
+|---|---|---|---|
+| **Weight** | criticality × urgency, on four levels: low, normal, high, critical | the trigger when typed (for example a CVE's severity score), or triage and a human route when loose | order: heavier units go first. Budget: the heavier the unit, the smaller its retry budget, so a human is pulled in sooner to supervise or step in |
+| **Spend** | tokens and time | the watcher | knowing when the retry budget is spent |
 
 ## Kinds of part
 
