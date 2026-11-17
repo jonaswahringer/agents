@@ -230,9 +230,9 @@ class SkillMenuTests(unittest.TestCase):
         frame = menu.frame(b"\x1b[F")
         while not re.search(r"(?m)^\s*[>❯]\s+\[[ x-]\] tdd\s", frame):
             frame = menu.frame(b"\x1b[A")
-        self.assertRegex(frame, r"(?m)tdd\s+mattp/tdd installs 'tdd'")
+        self.assertRegex(frame, r"(?m)tdd\s+shares 'tdd' with mattp/tdd")
         frame = menu.frame(b" ")
-        self.assertRegex(frame, r"(?m)tdd\s+skipped, mattp/tdd installs 'tdd'")
+        self.assertRegex(frame, r"(?m)tdd\s+installs as pstack-tdd")
         self.assertEqual(menu.finish(), 1)
 
     def test_loading_spinner_animates_until_installation_finishes(self):

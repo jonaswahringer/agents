@@ -231,22 +231,75 @@ diff -r "$TEST_ROOT/profile-before-add" "$TEST_HOME/.config/agents/profile" || f
 cp "$TEST_HOME/.config/agents/selected-skills" "$TEST_ROOT/selection-after-add"
 "$AGENTS" skills add jonasw/commit >/dev/null
 cmp "$TEST_ROOT/selection-after-add" "$TEST_HOME/.config/agents/selected-skills" || fail "add should be idempotent"
-if "$AGENTS" skills add pstack/teach > "$TEST_ROOT/add-conflict.txt" 2>&1; then
-  fail "add should reject a competing plain skill name"
-fi
 if "$AGENTS" skills add missing > "$TEST_ROOT/add-missing.txt" 2>&1; then
   fail "add should reject unknown skills"
 fi
 cmp "$TEST_ROOT/selection-after-add" "$TEST_HOME/.config/agents/selected-skills" || fail "failed add changed selections"
 
-# Two folders ship a skill called "teach"; the first selected folder installs it
-# and the other is reported as skipped rather than silently overwriting the link.
+# Two folders ship a skill called "teach". Each installs as FOLDER-teach, and
+# "teach" becomes a generated pointer that lists both.
+INSTALLED_ROOT="$(cd "$TEST_HOME/.local/share/agents/source" && pwd)"
+"$AGENTS" skills add pstack/teach >/dev/null
+assert_contains "$TEST_HOME/.config/agents/selected-skills" "mattp/teach"
+assert_contains "$TEST_HOME/.config/agents/selected-skills" "pstack/teach"
+for folder in mattp pstack; do
+  alias="$TEST_HOME/.agents/skills/$folder-teach"
+  assert_file "$alias/.agents-generated"
+  grep -qx "name: $folder-teach" "$alias/SKILL.md" || fail "$folder-teach should carry its new name"
+  for target in .claude .codex; do
+    [[ "$(readlink "$TEST_HOME/$target/skills/$folder-teach")" == "$alias" ]] || fail "$target should link $folder-teach"
+  done
+done
+[[ "$(readlink "$TEST_HOME/.agents/skills/mattp-teach/GLOSSARY-FORMAT.md")" == "$INSTALLED_ROOT/skills/mattp/teach/GLOSSARY-FORMAT.md" ]] || fail "an alias should link the source skill's other files"
+cmp -s <(grep -v '^name:' "$INSTALLED_ROOT/skills/pstack/teach/SKILL.md") <(grep -v '^name:' "$TEST_HOME/.agents/skills/pstack-teach/SKILL.md") || fail "an alias should only change the skill name"
+grep -qx "name: teach" "$TEST_HOME/.agents/skills/teach/SKILL.md" || fail "the pointer should keep the plain name"
+assert_contains "$TEST_HOME/.agents/skills/teach/SKILL.md" '`mattp-teach` (mattp, only the user starts it)'
+assert_contains "$TEST_HOME/.agents/skills/teach/SKILL.md" '`pstack-teach` (pstack, only the user starts it)'
+grep -qx "disable-model-invocation: true" "$TEST_HOME/.agents/skills/teach/SKILL.md" || fail "a pointer to user-only skills should be user-only"
+[[ "$(readlink "$TEST_HOME/.claude/skills/teach")" == "$TEST_HOME/.agents/skills/teach" ]] || fail "claude should link the pointer"
+"$AGENTS" skills add mattp/tdd >/dev/null
+"$AGENTS" skills add pstack/tdd >/dev/null
+assert_not_contains "$TEST_HOME/.agents/skills/tdd/SKILL.md" "disable-model-invocation"
+"$AGENTS" doctor > "$TEST_ROOT/doctor.txt"
+assert_contains "$TEST_ROOT/doctor.txt" "ok  mattp/teach as mattp-teach"
+assert_contains "$TEST_ROOT/doctor.txt" "ok  pstack/teach as pstack-teach"
+assert_contains "$TEST_ROOT/doctor.txt" "ok  teach, which lists mattp-teach pstack-teach"
+"$AGENTS" skills source > "$TEST_ROOT/skills-source.txt"
+assert_contains "$TEST_ROOT/skills-source.txt" "lists mattp-teach, pstack-teach"
+
+# A hand-edited generated file is reported, and the next install rebuilds it.
+printf 'edited\n' >> "$TEST_HOME/.agents/skills/teach/SKILL.md"
+if "$AGENTS" doctor > "$TEST_ROOT/doctor-stale.txt"; then
+  fail "doctor should fail on a stale pointer"
+fi
+assert_contains "$TEST_ROOT/doctor-stale.txt" "stale  teach, which lists mattp-teach pstack-teach"
+"$AGENTS" skills add pstack/teach >/dev/null
+"$AGENTS" doctor >/dev/null || fail "reinstalling should rebuild the stale pointer"
+
+# Once only one folder ships the name again, the plain link comes back and the
+# generated folders go away. A folder agents did not write is never touched.
+mkdir -p "$TEST_HOME/.agents/skills/pstack-tdd-notes"
+grep -v '^pstack/' "$TEST_HOME/.config/agents/selected-skills" > "$TEST_ROOT/without-pstack"
+"$AGENTS" skills --none >/dev/null
+while IFS= read -r skill; do "$AGENTS" skills add "$skill" >/dev/null; done < "$TEST_ROOT/without-pstack"
+[[ "$(readlink "$TEST_HOME/.agents/skills/teach")" == "$INSTALLED_ROOT/skills/mattp/teach" ]] || fail "teach should link mattp/teach again"
+for name in mattp-teach pstack-teach mattp-tdd pstack-tdd; do
+  assert_missing "$TEST_HOME/.agents/skills/$name"
+  assert_missing "$TEST_HOME/.claude/skills/$name"
+done
+[[ -d "$TEST_HOME/.agents/skills/pstack-tdd-notes" ]] || fail "an unrelated folder should be kept"
+rmdir "$TEST_HOME/.agents/skills/pstack-tdd-notes"
+
+# A folder the user made where an alias belongs is kept without --force.
+mkdir -p "$TEST_HOME/.agents/skills/pstack-teach"
+"$AGENTS" skills add pstack/teach >/dev/null 2> "$TEST_ROOT/alias-kept.txt"
+assert_contains "$TEST_ROOT/alias-kept.txt" "something else is already there"
+assert_missing "$TEST_HOME/.agents/skills/pstack-teach/SKILL.md"
+assert_missing "$TEST_HOME/.claude/skills/pstack-teach"
+rmdir "$TEST_HOME/.agents/skills/pstack-teach"
 "$AGENTS" skills --all >/dev/null
 "$AGENTS" doctor > "$TEST_ROOT/doctor.txt"
-assert_contains "$TEST_ROOT/doctor.txt" "ok  mattp/teach"
-assert_contains "$TEST_ROOT/doctor.txt" "skipped  pstack/teach"
-INSTALLED_ROOT="$(cd "$TEST_HOME/.local/share/agents/source" && pwd)"
-[[ "$(readlink "$TEST_HOME/.agents/skills/teach")" == "$INSTALLED_ROOT/skills/mattp/teach" ]] || fail "teach should come from the first selected folder"
+assert_contains "$TEST_ROOT/doctor.txt" "ok  pstack/teach as pstack-teach"
 
 NO_CONFIG_HOME="$TEST_ROOT/no-config-home"
 HOME="$NO_CONFIG_HOME" "$ROOT/install.sh" --skills nice --no-config >/dev/null

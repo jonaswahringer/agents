@@ -13,7 +13,7 @@ This repository installs shared agent instructions and skills.
 - Keep skills at `skills/<folder>/<name>/SKILL.md`, where the folder names whoever wrote them.
 - Read folders from disk instead of listing them in code, so a new folder needs no installer change.
 - Store a selection as `folder/name`, and keep resolving names saved before folders existed.
-- Install a skill under its plain name, because that is the name agents load it by.
+- Install a skill under its plain name, because that is the name agents load it by. When several selected folders ship the same name, install each as `folder-name` and make the plain name a generated skill that lists them.
 - Require valid front matter, and keep each skill's `name` equal to its directory name.
 
 ## Safety

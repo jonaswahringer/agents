@@ -338,14 +338,6 @@ deselect_category() {
   return 0
 }
 
-selected_installs_name() {
-  local wanted="$1" skill
-  for skill in "${SELECTED[@]}"; do
-    [[ "${skill##*/}" == "$wanted" ]] && return 0
-  done
-  return 1
-}
-
 load_selected() {
   SELECTED=()
   [[ -f "$SELECTED_FILE" ]] || return 0
@@ -584,17 +576,9 @@ menu_styles() {
 
 # Descriptions are only needed by the menu, so they load when it opens. One awk
 # pass reads them all; folded and quoted YAML collapse to a single line.
-load_skill_descriptions() {
-  SKILL_DESCRIPTIONS=()
-  [[ ${#SKILLS[@]} -gt 0 ]] || return 0
-  local skill line
-  local files=()
-  for skill in "${SKILLS[@]}"; do
-    files+=("$ROOT/skills/$skill/SKILL.md")
-  done
-  while IFS= read -r line; do
-    SKILL_DESCRIPTIONS+=("$line")
-  done < <(awk '
+# Prints each file's description on one line, unquoted and unfolded.
+skill_descriptions() {
+  awk '
     function finish(value) {
       gsub(/[[:space:]]+/, " ", value)
       sub(/^ /, "", value)
@@ -618,7 +602,20 @@ load_skill_descriptions() {
     { capture = 0 }
     /^description:/ { text = $0; sub(/^description:/, "", text); capture = 1 }
     END { if (NR > 0) finish(text) }
-  ' "${files[@]}" | if [[ $MENU_UNICODE -eq 1 ]]; then cat; else LC_ALL=C tr -d '\200-\377'; fi)
+  ' "$@"
+}
+
+load_skill_descriptions() {
+  SKILL_DESCRIPTIONS=()
+  [[ ${#SKILLS[@]} -gt 0 ]] || return 0
+  local skill line
+  local files=()
+  for skill in "${SKILLS[@]}"; do
+    files+=("$ROOT/skills/$skill/SKILL.md")
+  done
+  while IFS= read -r line; do
+    SKILL_DESCRIPTIONS+=("$line")
+  done < <(skill_descriptions "${files[@]}" | if [[ $MENU_UNICODE -eq 1 ]]; then cat; else LC_ALL=C tr -d '\200-\377'; fi)
 }
 
 # Shortens text to a width, ending in an ellipsis, into menu_fitted. Results go
@@ -666,19 +663,19 @@ menu_wrap() {
 # Two folders can ship the same skill name, and only the first selected one is
 # installed. Sets menu_note when this row loses that name to another selection.
 menu_skill_note() {
-  local skill="$1" name="${1##*/}" other first=""
+  local skill="$1" name="${1##*/}" other shared=""
   menu_note=""
   for other in "${SELECTED[@]}"; do
-    if [[ "${other##*/}" == "$name" ]]; then
-      first="$other"
+    if [[ "${other##*/}" == "$name" && "$other" != "$skill" ]]; then
+      shared="$other"
       break
     fi
   done
-  [[ -n "$first" && "$first" != "$skill" ]] || return 0
+  [[ -n "$shared" ]] || return 0
   if has_selected "$skill"; then
-    menu_note="skipped, $first installs '$name'"
+    menu_note="installs as ${skill%%/*}-$name"
   else
-    menu_note="$first installs '$name'"
+    menu_note="shares '$name' with $shared"
   fi
 }
 
@@ -1418,46 +1415,203 @@ install_furnace_command() {
 # Links are installed under the plain skill name, because that is the name agents
 # load. The saved file may still hold names from before skills gained folders, so
 # only the last path segment is compared.
+# Prints one row per installed name: NAME, KIND, and SOURCE, separated by tabs.
+# A name only one selected folder ships installs as a plain link (skill). When
+# several do, each installs as FOLDER-NAME (alias), and NAME becomes a pointer
+# whose SOURCE lists those folder/name entries.
+plan_installs() {
+  local entry name other members pointers=""
+  for entry in "$@"; do
+    name="${entry##*/}"
+    members=""
+    for other in "$@"; do
+      [[ "${other##*/}" != "$name" ]] || members="$members $other"
+    done
+    members="${members# }"
+    if [[ "$members" == "$entry" ]]; then
+      printf '%s\tskill\t%s\n' "$name" "$entry"
+      continue
+    fi
+    printf '%s-%s\talias\t%s\n' "${entry%%/*}" "$name" "$entry"
+    case " $pointers " in
+      *" $name "*) ;;
+      *)
+        pointers="$pointers $name"
+        printf '%s\tpointer\t%s\n' "$name" "$members"
+        ;;
+    esac
+  done
+}
+
+planned_names() {
+  local name kind source
+  while IFS=$'\t' read -r name kind source; do
+    printf '%s\n' "$name"
+  done < <(plan_installs "$@")
+}
+
+# Folders the installer writes itself carry this file, so it knows it may
+# rewrite or remove them.
+GENERATED_MARK=".agents-generated"
+
+generated_dir_is_managed() {
+  [[ -d "$1" && ! -L "$1" && -f "$1/$GENERATED_MARK" ]]
+}
+
+skill_is_user_only() {
+  awk '
+    NR == 1 { if ($0 != "---") exit; next }
+    $0 == "---" { exit }
+    /^disable-model-invocation:[[:space:]]*true[[:space:]]*$/ { found = 1; exit }
+    END { exit !found }
+  ' "$1"
+}
+
+# Prints a SKILL.md with its front matter name replaced.
+renamed_skill() {
+  awk -v name="$2" '
+    NR == 1 && $0 == "---" { inside = 1; print; next }
+    inside && $0 == "---" { inside = 0 }
+    inside && !renamed && /^name:/ { print "name: " name; renamed = 1; next }
+    { print }
+  ' "$1"
+}
+
+# Prints the SKILL.md of a pointer for NAME to the given folder/name entries.
+pointer_skill() {
+  local name="$1" entry user_only=1 description quoted
+  shift
+  local files=() descriptions=()
+  for entry in "$@"; do
+    files+=("$ROOT/skills/$entry/SKILL.md")
+    skill_is_user_only "$ROOT/skills/$entry/SKILL.md" || user_only=0
+  done
+  while IFS= read -r description; do
+    descriptions+=("$description")
+  done < <(skill_descriptions "${files[@]}")
+  description="Several skills are called $name and each does something different."
+  local index=0
+  for entry in "$@"; do
+    description="$description ${entry%%/*}-$name: ${descriptions[$index]}"
+    index=$((index + 1))
+  done
+  quoted="${description//\\/\\\\}"
+  quoted="${quoted//\"/\\\"}"
+  printf -- '---\nname: %s\ndescription: "%s"\n' "$name" "$quoted"
+  [[ $user_only -eq 0 ]] || printf 'disable-model-invocation: true\n'
+  printf -- '---\n\n<!-- Managed by agents. It rewrites this file on every install. -->\n\n'
+  printf '# %s\n\n' "$name"
+  printf 'More than one skill folder ships a skill called `%s`, and they do different things, so each one is installed under its folder name:\n\n' "$name"
+  index=0
+  for entry in "$@"; do
+    if skill_is_user_only "$ROOT/skills/$entry/SKILL.md"; then
+      printf -- '- `%s-%s` (%s, only the user starts it): %s\n' "${entry%%/*}" "$name" "${entry%%/*}" "${descriptions[$index]}"
+    else
+      printf -- '- `%s-%s` (%s): %s\n' "${entry%%/*}" "$name" "${entry%%/*}" "${descriptions[$index]}"
+    fi
+    index=$((index + 1))
+  done
+  printf '\nPick the one that fits:\n\n'
+  printf -- '- When a skill from one of these folders asks for `%s`, use that folder'"'"'s version.\n' "$name"
+  printf -- '- When the user typed `/%s` and the request does not settle it, ask which one they meant.\n' "$name"
+  printf -- '- When the user typed `/%s`, read and follow the chosen skill'"'"'s file:\n' "$name"
+  for entry in "$@"; do
+    printf '  `%s/skills/%s-%s/SKILL.md`\n' "$AGENTS_DIR" "${entry%%/*}" "$name"
+  done
+  printf -- '- Otherwise load it by its name. Never start one that only the user starts; suggest that they type it, such as `/%s-%s`.\n' "${1%%/*}" "$name"
+}
+
+# Makes room for a generated folder. Managed links and generated folders are
+# replaced; anything else needs the same approval and backup as safe_link.
+prepare_generated_dir() {
+  local target="$1" backup
+  mkdir -p "$(dirname "$target")"
+  if generated_dir_is_managed "$target"; then
+    rm -rf "$target"
+  elif link_is_managed "$target"; then
+    rm "$target"
+  elif [[ -e "$target" || -L "$target" ]]; then
+    if ! confirm_replace "$target"; then
+      echo "Skipped $target because something else is already there." >&2
+      return 1
+    fi
+    backup="$(backup_target "$target")"
+    echo "Replaced $target; backup: $backup"
+  fi
+  mkdir "$target"
+}
+
+# An alias links every file of the source skill except SKILL.md, which is a
+# copy with the new name, so references and scripts still resolve.
+write_alias() {
+  local source="$1" target="$2" entry
+  prepare_generated_dir "$target" || return 1
+  for entry in "$source"/* "$source"/.[!.]*; do
+    [[ -e "$entry" || -L "$entry" ]] || continue
+    [[ "$(basename "$entry")" != SKILL.md ]] || continue
+    ln -s "$entry" "$target/$(basename "$entry")"
+  done
+  renamed_skill "$source/SKILL.md" "$(basename "$target")" > "$target/SKILL.md"
+  : > "$target/$GENERATED_MARK"
+}
+
+write_pointer() {
+  local target="$1" name="$2"
+  shift 2
+  prepare_generated_dir "$target" || return 1
+  pointer_skill "$name" "$@" > "$target/SKILL.md"
+  : > "$target/$GENERATED_MARK"
+}
+
 remove_old_skill_links() {
-  local entry name
+  local entry name directory
+  local previous=() current
   [[ -f "$SELECTED_FILE" ]] || return 0
   while IFS= read -r entry; do
-    [[ -n "$entry" ]] || continue
-    name="${entry##*/}"
-    selected_installs_name "$name" && continue
-    if link_points_to "$CLAUDE_DIR/skills/$name" "$AGENTS_DIR/skills/$name" || link_is_managed "$CLAUDE_DIR/skills/$name"; then
-      rm "$CLAUDE_DIR/skills/$name"
-    fi
-    if link_points_to "$CODEX_DIR/skills/$name" "$AGENTS_DIR/skills/$name" || link_is_managed "$CODEX_DIR/skills/$name"; then
-      rm "$CODEX_DIR/skills/$name"
-    fi
+    [[ -z "$entry" ]] || previous+=("$entry")
+  done < "$SELECTED_FILE"
+  current=" $(planned_names "${SELECTED[@]}" | tr '\n' ' ') "
+  while IFS= read -r name; do
+    case "$current" in *" $name "*) continue ;; esac
+    for directory in "$CLAUDE_DIR" "$CODEX_DIR"; do
+      if link_points_to "$directory/skills/$name" "$AGENTS_DIR/skills/$name" || link_is_managed "$directory/skills/$name"; then
+        rm "$directory/skills/$name"
+      fi
+    done
     if link_is_managed "$AGENTS_DIR/skills/$name"; then
       rm "$AGENTS_DIR/skills/$name"
+    elif generated_dir_is_managed "$AGENTS_DIR/skills/$name"; then
+      rm -rf "$AGENTS_DIR/skills/$name"
     fi
-  done < "$SELECTED_FILE"
+  done < <(planned_names "${previous[@]}")
 }
 
 apply_skill_selection() {
-  local entry name source installed=""
+  local entry name kind source target
+  local available=()
   remove_old_skill_links
   for entry in "${SELECTED[@]}"; do
-    name="${entry##*/}"
-    source="$ROOT/skills/${entry%%/*}/$name"
-    if [[ ! -f "$source/SKILL.md" ]]; then
+    if [[ -f "$ROOT/skills/$entry/SKILL.md" ]]; then
+      available+=("$entry")
+    else
       echo "Selected skill '$entry' no longer exists; skipping it." >&2
-      continue
     fi
-    case " $installed " in
-      *" $name "*)
-        echo "Skipped $entry because another folder already installs '$name'." >&2
-        continue
-        ;;
-    esac
-    installed="$installed $name"
-    safe_link "$source" "$AGENTS_DIR/skills/$name"
-    safe_link "$AGENTS_DIR/skills/$name" "$CLAUDE_DIR/skills/$name"
-    safe_link "$AGENTS_DIR/skills/$name" "$CODEX_DIR/skills/$name"
   done
+  while IFS=$'\t' read -r name kind source; do
+    target="$AGENTS_DIR/skills/$name"
+    case "$kind" in
+      skill)
+        if generated_dir_is_managed "$target"; then
+          rm -rf "$target"
+        fi
+        safe_link "$ROOT/skills/$source" "$target"
+        ;;
+      alias) write_alias "$ROOT/skills/$source" "$target" || continue ;;
+      pointer) write_pointer "$target" "$name" $source || continue ;;
+    esac
+    safe_link "$target" "$CLAUDE_DIR/skills/$name"
+    safe_link "$target" "$CODEX_DIR/skills/$name"
+  done < <(plan_installs "${available[@]}")
   save_selected
 }
 
@@ -1548,15 +1702,10 @@ skills_command() {
     return 0
   elif [[ "${1:-}" == "add" ]]; then
     [[ $# -eq 2 ]] || die "usage: agents skills add folder/name"
-    local resolved status skill
+    local resolved status
     resolved="$(resolve_skill "$2")" && status=0 || status=$?
     [[ $status -ne 2 ]] || die "several folders contain '$2'; name it as folder/$2"
     [[ $status -eq 0 ]] || die "unknown skill: $2"
-    for skill in "${SELECTED[@]}"; do
-      if [[ "${skill##*/}" == "${resolved##*/}" && "$skill" != "$resolved" ]]; then
-        die "'$skill' already installs '${resolved##*/}'; deselect it through 'agents skills' first"
-      fi
-    done
     add_selected "$resolved"
     NON_INTERACTIVE=1
   elif [[ "${1:-}" == "--all" ]]; then
@@ -1687,7 +1836,7 @@ source_report() {
 }
 
 skills_source_report() {
-  local category skill name source width installed="" problem directory
+  local category skill name kind path entry width problem directory
   local names=()
   heading "Skills source"
   printf '  %s\n' "$(display_path "$ROOT/skills")"
@@ -1704,37 +1853,44 @@ skills_source_report() {
   fi
   echo "  Each skill links $(display_path "$AGENTS_DIR/skills")/NAME to its source folder."
   echo "  $(display_path "$CLAUDE_DIR/skills")/NAME and $(display_path "$CODEX_DIR/skills")/NAME link to that path."
+  echo "  When several folders ship NAME, each installs as FOLDER-NAME, and NAME lists them."
   echo
-  for skill in "${SELECTED[@]}"; do
-    names+=("${skill##*/}")
-  done
+  while IFS=$'\t' read -r name kind skill; do
+    names+=("$name")
+  done < <(plan_installs "${SELECTED[@]}")
   width="$(max_width "${names[@]}")"
-  for skill in "${SELECTED[@]}"; do
-    name="${skill##*/}"
-    source="$ROOT/skills/$skill"
-    case " $installed " in
-      *" $name "*)
-        printf '  %-*s  →  %s  (skipped; another folder already installs this name)\n' "$width" "$name" "$skill"
-        continue
+  while IFS=$'\t' read -r name kind skill; do
+    path="$AGENTS_DIR/skills/$name"
+    case "$kind" in
+      skill)
+        printf '  %-*s  →  %s\n' "$width" "$name" "$skill"
+        problem="$(link_problem "$path" "$ROOT/skills/$skill")"
+        ;;
+      alias)
+        printf '  %-*s  →  %s  (renamed; another folder also has '\''%s'\'')\n' "$width" "$name" "$skill" "${skill##*/}"
+        problem=""
+        generated_dir_is_managed "$path" || problem="is not a folder generated by agents"
+        ;;
+      pointer)
+        printf '  %-*s  →  lists %s\n' "$width" "$name" "$(for entry in $skill; do printf '%s-%s ' "${entry%%/*}" "$name"; done | sed 's/ $//; s/ /, /g')"
+        problem=""
+        generated_dir_is_managed "$path" || problem="is not a folder generated by agents"
         ;;
     esac
-    installed="$installed $name"
-    printf '  %-*s  →  %s\n' "$width" "$name" "$skill"
-    problem="$(link_problem "$AGENTS_DIR/skills/$name" "$source")"
     if [[ -n "$problem" ]]; then
-      printf '  %-*s     ! %s %s\n' "$width" "" "$(display_path "$AGENTS_DIR/skills/$name")" "$problem"
+      printf '  %-*s     ! %s %s\n' "$width" "" "$(display_path "$path")" "$problem"
     fi
     for directory in "$CLAUDE_DIR" "$CODEX_DIR"; do
-      problem="$(link_problem "$directory/skills/$name" "$AGENTS_DIR/skills/$name")"
+      problem="$(link_problem "$directory/skills/$name" "$path")"
       if [[ -n "$problem" ]]; then
         printf '  %-*s     ! %s %s\n' "$width" "" "$(display_path "$directory/skills/$name")" "$problem"
       fi
     done
-  done
+  done < <(plan_installs "${SELECTED[@]}")
 }
 
 doctor_command() {
-  local failed=0 verbose=0 skill path source name installed="" missing line
+  local failed=0 verbose=0 skill path source name kind label entry missing line
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --verbose|-v) verbose=1 ;;
@@ -1777,27 +1933,39 @@ doctor_command() {
   discover_skills
   load_selected
   ensure_global_response_skill
-  for skill in "${SELECTED[@]}"; do
-    name="${skill##*/}"
+  while IFS=$'\t' read -r name kind skill; do
     path="$AGENTS_DIR/skills/$name"
-    source="$ROOT/skills/${skill%%/*}/$name"
-    case " $installed " in
-      *" $name "*)
-        echo "skipped  $skill; another folder installs '$name'"
-        continue
+    case "$kind" in
+      skill)
+        source="$ROOT/skills/$skill"
+        if link_points_to "$path" "$source"; then
+          echo "ok  $skill"
+        elif [[ -e "$path/SKILL.md" ]]; then
+          echo "conflict  $path does not point at $source"
+          failed=1
+        else
+          echo "missing  $skill"
+          failed=1
+        fi
+        ;;
+      alias|pointer)
+        if [[ "$kind" == alias ]]; then
+          label="$skill as $name"
+        else
+          label="$name, which lists$(for entry in $skill; do printf ' %s-%s' "${entry%%/*}" "$name"; done)"
+        fi
+        if ! generated_dir_is_managed "$path"; then
+          echo "missing  $label"
+          failed=1
+        elif { if [[ "$kind" == alias ]]; then renamed_skill "$ROOT/skills/$skill/SKILL.md" "$name"; else pointer_skill "$name" $skill; fi; } | cmp -s - "$path/SKILL.md"; then
+          echo "ok  $label"
+        else
+          echo "stale  $label; run 'agents update' to rebuild it"
+          failed=1
+        fi
         ;;
     esac
-    installed="$installed $name"
-    if link_points_to "$path" "$source"; then
-      echo "ok  $skill"
-    elif [[ -e "$path/SKILL.md" ]]; then
-      echo "conflict  $path does not point at $source"
-      failed=1
-    else
-      echo "missing  $skill"
-      failed=1
-    fi
-  done
+  done < <(plan_installs "${SELECTED[@]}")
   source="$ROOT/bin/usage"
   if [[ -f "$source" ]]; then
     path="$BIN_DIR/$(resolved_usage_name)"
