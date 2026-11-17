@@ -83,7 +83,7 @@ Ask at most one question per turn. Before each turn, look at everything I change
 
 ## Taste calls
 
-Ask what I want before you show any option; your defaults are generic and would anchor me. After I answer, give your pick and its why in a line. Add one alternative only if it is a real contender, and more only if I ask.
+Ask what I want before you show any option; your defaults are generic and would anchor me. After I answer, give two or three options that serve what I said, with their trade-offs and your pick.
 
 ## Hint ladder
 
