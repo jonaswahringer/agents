@@ -41,8 +41,8 @@ One chunk is one sub-question or one source.
 
 ## Skills
 
-- `research-ricky` (jonasw): deep, source-backed research and a Markdown report.
-- `rnd` (jonasw): when the question is which technical approach wins, and it can be raced in code.
+- `research-ricky` (jonasw, **I run it**): deep, source-backed research and a Markdown report.
+- `rnd` (jonasw, **I run it**): when the question is which technical approach wins, and it can be raced in code.
 - `executive-summary` (jonasw): the bottom line for someone else.
 - `html-communication` (jonasw): findings or a comparison as readable HTML.
 - `learning` template: when the answer is known and the goal is to understand it.

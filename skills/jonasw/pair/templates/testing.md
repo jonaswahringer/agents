@@ -40,7 +40,7 @@ One chunk is one behaviour, or one row of the matrix.
 ## Skills
 
 - `tdd` (mattp): test-first chunks.
-- `create-verification-skill` (pstack): a reusable way for the agent to run and check the real app.
-- `principle-prove-it-works` (pstack): verify against the real artifact, not a proxy.
-- `statechart` (pstack): when the behaviour is a flow with rules, check it as a model. It arrives with the pstack sync.
+- `create-verification-skill` (pstack, **I run it**): a reusable way for the agent to run and check the real app.
+- `principle-prove-it-works` (pstack, **I run it**): verify against the real artifact, not a proxy.
+- `statechart` (pstack, **I run it**): when the behaviour is a flow with rules, check it as a model. It arrives with the pstack sync.
 - `programming` template: when the session moves from strategy into writing many tests.

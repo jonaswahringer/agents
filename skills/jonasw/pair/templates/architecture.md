@@ -42,7 +42,7 @@ One chunk is one flow or one rule.
 
 ## Skills
 
-- `statechart` (pstack): every flow. If it is not installed, say so and ask before going on. Do not hand-draw a chart in its place.
+- `statechart` (pstack, **I run it**): every flow. Ask me to start `/statechart` for each one. If it is not installed, say so and ask before going on. Do not hand-draw a chart in its place.
 - `c4-explorer` (jonasw): system structure and drill-down into an unfamiliar codebase.
-- `how` and `why` (pstack): trace how existing code works and why it was built that way, before modelling it.
+- `how` and `why` (pstack, **I run it**): trace how existing code works and why it was built that way, before modelling it.
 - `codebase-design` and `domain-modeling` (mattp): vocabulary for modules, seams, and domain terms.

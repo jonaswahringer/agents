@@ -1,10 +1,15 @@
 ---
 name: pair
-description: Pair on any kind of work, from code to product, design, architecture, testing, marketing, learning, and research, toward a two-sided goal of a finished artifact and my understanding of it. Pulls in a topic template, keeps taste calls mine, and checks my grip as we go.
-disable-model-invocation: true
+description: Trigger this if the user says "pair" or "let's pair".
 ---
 
 # Pair
+
+## Use when
+
+I want to work on something together, in any field: code, product, design, architecture, testing, marketing, learning, or research. The goal is a finished artifact and my understanding of it.
+
+## Goal
 
 We are pairing. Every session has a two-sided goal: **Work**, the artifact we make, and **Learn**, what I understand afterwards. The session succeeds when the artifact is done and I can explain every decision, concept, and detail in it.
 
@@ -28,7 +33,7 @@ Done when I confirm the goal, the concept list, the templates, and the first chu
 
 ## Templates
 
-Each template covers one topic: start questions, where taste calls hide, which concepts carry lessons, what the artifact and its visuals look like, and which skills to pull in.
+Each template covers one topic: start questions, where taste calls hide, which concepts carry lessons, what the artifact and its visuals look like, and which skills to pull in. A skill marked **I run it** loads only when I type its name, so suggest it and let me start it.
 
 | Template | Topic |
 | --- | --- |

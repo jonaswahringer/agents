@@ -1,8 +1,11 @@
 ---
 name: tidy
-description: Find disk space you can safely free, starting with stale git worktrees across projects or under one folder, then free what you approve.
-disable-model-invocation: true
+description: Trigger this if the user says "tidy" or "tidy up".
 ---
+
+## Use when
+
+The user wants to free disk space, starting with stale git worktrees across projects or under one folder. Nothing is removed until they approve a list.
 
 Run a **mark-and-sweep** over one or more **sweeps**. Mark everything that something still holds; whatever is left is a candidate. Until the user approves a list, the whole run is a **dry run**.
 

@@ -41,8 +41,8 @@ One chunk is one screen, one state, or one component.
 ## Skills
 
 - `prototype` (mattp): a throwaway UI to explore what a screen should look like.
-- `principle-exhaust-the-design-space` (pstack): two or three competing designs for a novel interaction.
-- `principle-experience-first` (pstack): user delight over implementation convenience.
+- `principle-exhaust-the-design-space` (pstack, **I run it**): two or three competing designs for a novel interaction.
+- `principle-experience-first` (pstack, **I run it**): user delight over implementation convenience.
 - `html-communication` (jonasw): UI mocks as readable HTML.
 - `product` template: when the open question is what to build, not how it looks.
 - `programming` template: when the work turns into implementation.

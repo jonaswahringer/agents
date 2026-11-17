@@ -39,6 +39,6 @@ For understanding a topic in depth. Learn is the main side of the goal; the Work
 
 ## Skills
 
-- `research-ricky` (jonasw): source-backed research when the material needs it.
-- `how` and `why` (pstack): when the topic is a codebase or system.
-- `teach` (mattp): when I want a lasting workspace of lessons and learning records on disk.
+- `research-ricky` (jonasw, **I run it**): source-backed research when the material needs it.
+- `how` and `why` (pstack, **I run it**): when the topic is a codebase or system.
+- `teach` (mattp, **I run it**): when I want a lasting workspace of lessons and learning records on disk.

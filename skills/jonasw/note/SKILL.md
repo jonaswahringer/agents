@@ -1,8 +1,11 @@
 ---
 name: note
-description: Take in an aside — extra context, a correction, or a constraint dropped mid-conversation — without derailing the current task.
-disable-model-invocation: true
+description: Trigger this if the user says "note" or "side note", or starts a message with "note:".
 ---
+
+## Use when
+
+The user drops an aside while a task is in flight: extra context, a correction, or a constraint. It is not a new task.
 
 The user is handing you an **aside**: information relevant to the work, delivered out of band. It is context, not a new task. The current task stays the current task.
 

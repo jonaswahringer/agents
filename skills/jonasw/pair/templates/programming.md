@@ -40,8 +40,8 @@ Concepts that usually carry a lesson here:
 
 ## Skills
 
-- `architect` (pstack) and `codebase-design` (mattp): types, signatures, and module shape before code.
-- `principle-model-the-domain` (pstack): pick the structure for stateful or branchy logic.
+- `architect` (pstack, **I run it**) and `codebase-design` (mattp): types, signatures, and module shape before code.
+- `principle-model-the-domain` (pstack, **I run it**): pick the structure for stateful or branchy logic.
 - `tdd` (mattp): test-first chunks. Use the `testing` template for testing-heavy work.
 - `diagnosing-bugs` (mattp): hard bugs and performance regressions.
 - `prototype` (mattp): a throwaway sketch to settle a design question.

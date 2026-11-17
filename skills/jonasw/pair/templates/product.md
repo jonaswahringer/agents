@@ -39,9 +39,9 @@ One chunk is one question settled or one section of the artifact.
 
 ## Skills
 
-- `grilling` or `grill-with-docs` (mattp): stress-test a plan or idea.
-- `to-spec` and `to-tickets` (mattp): turn the agreed shape into a spec or tickets on the tracker.
-- `wayfinder` (mattp): work too big for one session.
+- `grilling` (mattp): stress-test a plan or idea; add `domain-modeling` (mattp) to record terms and decisions as docs.
+- `to-spec` and `to-tickets` (mattp, **I run it**): turn the agreed shape into a spec or tickets on the tracker.
+- `wayfinder` (mattp, **I run it**): work too big for one session.
 - `goals` (jonasw): an aspiration that needs a binary done-when.
-- `principle-experience-first` (pstack): scope trade-offs.
+- `principle-experience-first` (pstack, **I run it**): scope trade-offs.
 - `html-communication` (jonasw): a spec or comparison as readable HTML.
