@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>delta-flume Blueprint</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --c-fg: var(--foreground, #1c1c21);
+    --c-muted: var(--muted-foreground, #6e6e78);
+    --c-card: var(--card, #ffffff);
+    --c-border: var(--border, #dcdce2);
+    --c-soft: var(--secondary, #eeeef2);
+    --c-purpose: var(--info, #2f6fde);
+    --c-policy: var(--warning, #d9822b);
+    --c-radius: var(--radius, 8px);
+    --c-d: var(--success, #1f9d55);
+    --c-s: var(--chart-4, #8b5cf6);
+    --c-h: var(--destructive, #d64545);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-fg: var(--foreground, #ececf1);
+      --c-muted: var(--muted-foreground, #9a9aa6);
+      --c-card: var(--card, #17171c);
+      --c-border: var(--border, #2e2e36);
+      --c-soft: var(--secondary, #24242c);
+    }
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  h2 { font-size: 12px; margin: 0 0 8px; color: var(--c-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .sub { color: var(--c-muted); font-size: 13px; margin: 3px 0 0; }
+  a { color: var(--c-purpose); }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans, system-ui, sans-serif); fill: var(--c-fg); }
+  .t { font-size: 15px; font-weight: 650; }
+  .e { font-size: 12.5px; font-weight: 600; fill: var(--c-muted) !important; }
+
+  .outside { fill: var(--c-card); stroke: var(--c-fg); stroke-width: 1.3; }
+  .vessel { fill: none; stroke: var(--c-purpose); stroke-width: 2.4; }
+  .vessel-t { fill: var(--c-purpose) !important; font-size: 15px; font-weight: 700; }
+  .gateway { fill: var(--c-policy); fill-opacity: .1; stroke: var(--c-policy); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .gateway-t { fill: var(--c-policy) !important; font-size: 14px; font-weight: 700; }
+  .loop { fill: var(--c-soft); fill-opacity: .5; stroke: var(--c-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .loop-t { font-size: 14px; font-weight: 700; }
+  .cycle { font-size: 34px; fill: var(--c-muted) !important; opacity: .6; }
+  .policy { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; }
+  .policy-dash { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; stroke-dasharray: 5 4; }
+  .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .exit { fill: var(--c-card); stroke: var(--c-muted); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+  .dash { stroke-dasharray: 5 4; }
+
+  .kind text { font-size: 11px; font-weight: 800; fill: #fff !important; }
+  .kind.d circle { fill: var(--c-d); } .kind.s circle { fill: var(--c-s); } .kind.h circle { fill: var(--c-h); }
+  .k { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; vertical-align: -3px; }
+  .k.d { background: var(--c-d); } .k.s { background: var(--c-s); } .k.h { background: var(--c-h); }
+
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .legend section { border: 1px solid var(--c-border); border-radius: var(--c-radius); padding: 10px 14px; }
+  .legend section.wide { grid-column: 1 / -1; }
+  .row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: start; font-size: 13px; margin: 7px 0; line-height: 1.4; }
+  .steps .row { grid-template-columns: 110px 1fr; }
+  .steps .row > b { font-size: 13px; }
+  .ladder { margin: 4px 0 0; padding: 0; list-style: none; }
+  .ladder li { margin: 3px 0; }
+  .sw { width: 26px; height: 16px; margin-top: 1px; }
+  .sw.outside { border: 1.3px solid var(--c-fg); border-radius: 4px; }
+  .sw.vessel { border: 2.4px solid var(--c-purpose); border-radius: 5px; }
+  .sw.gateway { background: color-mix(in srgb, var(--c-policy) 12%, transparent); border: 1.5px dashed var(--c-policy); border-radius: 4px; }
+  .sw.loop { background: color-mix(in srgb, var(--c-soft) 50%, transparent); border: 1.5px dashed var(--c-muted); border-radius: 4px; }
+  .sw.policy { width: 13px; height: 13px; border: 2px solid var(--c-policy); transform: rotate(45deg); margin: 2px 0 0 6px; }
+  .sw.mech { background: var(--c-soft); border: 1.3px solid var(--c-muted); border-radius: 4px; }
+  .sw.exit { border: 1.3px dashed var(--c-muted); border-radius: 4px; }
+  @media (max-width: 640px) { .legend { grid-template-columns: 1fr; } .steps .row { grid-template-columns: 1fr; gap: 2px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>delta-flume: inside one vessel</h1>
+    <p class="sub">Every vessel follows this blueprint. Only the purpose, and the policy and mechanism that serve it, differ.</p>
+  </div>
+
+  <svg viewBox="0 0 1000 430" role="img" aria-label="Vessel blueprint: a trigger passes the gateway, the agent loop writes and verifies until no findings are left, then Land decides whether output leaves the vessel">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
+      </marker>
+    </defs>
+
+    <!-- outside -->
+    <rect class="outside" x="10" y="148" width="120" height="44" rx="8"/>
+    <text class="t" x="70" y="175" text-anchor="middle">Trigger</text>
+    <rect class="exit" x="180" y="8" width="100" height="36" rx="6"/>
+    <text class="t" x="230" y="31" text-anchor="middle">Logged</text>
+
+    <!-- vessel -->
+    <rect class="vessel" x="150" y="60" width="720" height="310" rx="16"/>
+    <text class="vessel-t" x="164" y="84">Vessel</text>
+
+    <!-- gateway -->
+    <rect class="gateway" x="165" y="95" width="230" height="260" rx="10"/>
+    <text class="gateway-t" x="177" y="343">Gateway</text>
+
+    <path class="edge" d="M130,170 H190"/>
+    <path class="policy" d="M230,132 L268,170 L230,208 L192,170 Z"/>
+    <text class="t" x="230" y="175" text-anchor="middle">Accept</text>
+    <g class="kind d"><circle cx="253" cy="138" r="8.5"/><text x="253" y="142" text-anchor="middle">d</text></g>
+    <path class="edge" d="M230,132 V46"/>
+    <text class="e" x="236" y="104">no</text>
+
+    <path class="edge" d="M268,170 H295"/>
+    <path class="policy" d="M335,132 L373,170 L335,208 L297,170 Z"/>
+    <text class="t" x="335" y="175" text-anchor="middle">Start</text>
+    <g class="kind d"><circle cx="358" cy="138" r="8.5"/><text x="358" y="142" text-anchor="middle">d</text></g>
+    <path class="edge" d="M335,208 V246 H362 V193"/>
+    <text class="e" x="300" y="266">not now: wait</text>
+
+    <!-- agent loop: a circle of write -> verify -> findings -> write -->
+    <rect class="loop" x="410" y="95" width="325" height="260" rx="10"/>
+    <text class="loop-t" x="422" y="343">Agent loop</text>
+
+    <path class="edge" d="M373,170 H443"/>
+    <rect class="mech" x="445" y="150" width="90" height="40" rx="8"/>
+    <text class="t" x="490" y="175" text-anchor="middle">Write</text>
+    <g class="kind s"><circle cx="445" cy="150" r="8.5"/><text x="445" y="154" text-anchor="middle">s</text></g><g class="kind d"><circle cx="463" cy="150" r="8.5"/><text x="463" y="154" text-anchor="middle">d</text></g>
+
+    <rect class="mech" x="610" y="150" width="90" height="40" rx="8"/>
+    <text class="t" x="655" y="175" text-anchor="middle">Verify</text>
+    <g class="kind d"><circle cx="682" cy="150" r="8.5"/><text x="682" y="154" text-anchor="middle">d</text></g><g class="kind s"><circle cx="700" cy="150" r="8.5"/><text x="700" y="154" text-anchor="middle">s</text></g>
+
+    <path class="policy" d="M572,258 L620,290 L572,322 L524,290 Z"/>
+    <text class="t" x="572" y="295" text-anchor="middle">Findings</text>
+
+    <path class="edge" d="M522,150 Q572,98 622,148"/>
+    <path class="edge" d="M672,190 Q660,250 578,257"/>
+    <path class="edge" d="M524,290 Q462,272 470,193"/>
+    <text class="e" x="424" y="262">findings</text>
+
+    <!-- watcher -> dead letters -->
+    <rect class="exit" x="735" y="8" width="140" height="36" rx="6"/>
+    <text class="t" x="805" y="31" text-anchor="middle">Dead letters</text>
+    <g class="kind h"><circle cx="875" cy="9" r="8.5"/><text x="875" y="13" text-anchor="middle">h</text></g>
+    <path class="edge" d="M805,110 V46"/>
+    <text class="e" x="811" y="84">budget spent</text>
+    <rect class="policy-dash" x="755" y="110" width="100" height="40" rx="8"/>
+    <text class="t" x="805" y="135" text-anchor="middle">Watcher</text>
+    <g class="kind d"><circle cx="855" cy="110" r="8.5"/><text x="855" y="114" text-anchor="middle">d</text></g>
+    <path class="edge dash" d="M755,130 H737"/>
+
+    <!-- land -->
+    <path class="edge" d="M620,290 H763"/>
+    <text class="e" x="634" y="282">none</text>
+    <path class="policy" d="M803,250 L843,290 L803,330 L763,290 Z"/>
+    <text class="t" x="803" y="295" text-anchor="middle">Land</text>
+    <g class="kind h"><circle cx="823" cy="255" r="8.5"/><text x="823" y="259" text-anchor="middle">h</text></g><g class="kind d"><circle cx="842" cy="263" r="8.5"/><text x="842" y="267" text-anchor="middle">d</text></g>
+
+    <path class="edge" d="M843,290 H888"/>
+    <rect class="outside" x="890" y="268" width="100" height="44" rx="8"/>
+    <text class="t" x="940" y="295" text-anchor="middle">Output</text>
+
+    <path class="edge" d="M803,330 V345 H572 V324"/>
+    <text class="e" x="588" y="340">changes requested</text>
+    <path class="edge" d="M803,330 V378"/>
+    <text class="e" x="809" y="360">rejected</text>
+    <rect class="exit" x="753" y="380" width="100" height="36" rx="6"/>
+    <text class="t" x="803" y="403" text-anchor="middle">Closed</text>
+  </svg>
+
+  <div class="legend">
+    <section>
+      <h2>Shapes</h2>
+      <div class="row"><span class="sw outside"></span><span><b>Outside the vessel</b>: trigger and output.</span></div>
+      <div class="row"><span class="sw vessel"></span><span><b>Vessel</b>: one responsibility. The purpose layer.</span></div>
+      <div class="row"><span class="sw gateway"></span><span><b>Gateway</b>: input policy.</span></div>
+      <div class="row"><span class="sw loop"></span><span><b>Agent loop</b>: the mechanism.</span></div>
+    </section>
+    <section>
+      <h2>Inside the shapes</h2>
+      <div class="row"><span class="sw policy"></span><span><b>Decision</b>: policy. A unit moves on only if it passes.</span></div>
+      <div class="row"><span class="sw mech"></span><span><b>Step</b>: work done by agents, tools or people.</span></div>
+      <div class="row"><span class="sw exit"></span><span><b>Exit</b>: a unit leaves without landing.</span></div>
+      <div class="row"><span></span><span><b>Kind of part</b>: <span class="k d">d</span> deterministic, <span class="k s">s</span> stochastic, <span class="k h">h</span> human.</span></div>
+    </section>
+    <section class="wide steps">
+      <h2>Steps</h2>
+      <div class="row"><b>Trigger</b><span>Typed, or loose and routed by a human through triage.</span></div>
+      <div class="row"><b>Accept</b><span>Judges the unit. Declines a duplicate without new input, a superseded unit, or incomplete input, and asks for what's missing. Declined units are logged.</span></div>
+      <div class="row"><b>Start</b><span>Judges the vessel. While it's overloaded or paused, the unit waits.</span></div>
+      <div class="row"><b>Write</b><span>Agents and tools, such as agent CLIs and the runtime, make a change.</span></div>
+      <div class="row"><b>Verify</b><span>Checks the change, cheapest first (after poteto's pyramid; a well-designed codebase makes every check cheaper):
+        <ul class="ladder">
+          <li><span class="k d">d</span> static analysis, tests, CI</li>
+          <li><span class="k d">d</span> runtime verification</li>
+          <li><span class="k s">s</span> review agent, against prose rules and skills</li>
+        </ul></span></div>
+      <div class="row"><b>Findings</b><span>Each finding goes back to Write with its reason. None left: on to Land.</span></div>
+      <div class="row"><b>Watcher</b><span>Watches what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to dead letters, and a human is notified.</span></div>
+      <div class="row"><b>Land</b><span>A human decides by default. A reversible class of work can be allow-listed to land on deterministic checks alone. Changes requested go back into the loop as findings. Rejected output is closed and recorded.</span></div>
+      <div class="row"><b>Output</b><span>A PR, a report, an issue.</span></div>
+      <div class="row"><b>Record</b><span>Every step leaves a trace of source, reasoning and decision. Where it lives is up to the mechanism: a PR, git history, an issue, or a log.</span></div>
+    </section>
+  </div>
+  <p class="sub">The big picture is in <a href="overview.html">overview.html</a>.</p>
+</div>
+</body>
+</html>
