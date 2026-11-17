@@ -28,11 +28,11 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/ma
 The installer opens a keyboard menu:
 
 ```text
-  agents / setup                                                    4 of 89 selected
+  agents / setup                                                   4 of 103 selected
   1 jonasw  2 mattp  3 pstack  4 tstack
 
     [ ] Global config  Shared AGENTS.md for Claude Code and Codex
-    [-] Skills                                                                  4/89
+    [-] Skills                                                                 4/103
       ▸ [-] jonasw                                                              2/14
       ▾ [-] mattp                                                               2/22
         [x] ask-matt                  Ask which skill or flow fits your situation
@@ -290,11 +290,16 @@ before using the rest, and `ask-matt` when you want to know which one fits.
 
 ### `pstack`
 
-Peter Steinberger's skills: `architect`, `arena`, `swarm`, `interrogate`,
-`figure-it-out`, `how`, `why`, `reflect`, `recall`, `unslop`, `no-comments`,
-`technical-writing`, `typescript-best-practices`, its own `tdd` and `teach`, and a
-large set of `principle-*` skills covering one engineering principle each. Run
-`setup-pstack` once per repository.
+Lauren Tan's (poteto) skills from Cursor's pstack plugin: `architect`, `arena`,
+`swarm`, `interrogate`, `figure-it-out`, `how`, `why`, `reflect`, `recall`, `unslop`,
+`no-comments`, `technical-writing`, `typescript-best-practices`, its own `tdd` and
+`teach`, and a large set of `principle-*` skills covering one engineering principle
+each. `statechart` checks a TLA+ model and draws it as a Mermaid statechart; it needs
+Node 22.18+, Bun, or Deno, and its first run installs TLC and Java with mise.
+`create-formal-verification-skill` and `maintain-formal-verification-skill` set up
+and maintain a project's formal verification. `ketchup`, `in-your-own-words`, `sharpen`, and `correct` catch you up, play back
+the goal, deepen a prompt, and stop repeated agent mistakes. Run `setup-pstack` once
+per repository, and `poteto-help` when you want to know which skill fits.
 
 ### `tstack`
 

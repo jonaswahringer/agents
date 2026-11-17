@@ -31,7 +31,7 @@ checkout="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null)" || die "run t
 group="$ROOT/skills/$folder"
 manifest="$group/upstream.tsv"
 [[ -d "$group" && ! -L "$group" && -f "$manifest" && ! -L "$manifest" ]] || die "no upstream manifest for $folder"
-repository=""; branch=""; baseline=""; names=(); paths=(); locals=()
+repository=""; branch=""; baseline=""; root=""; names=(); paths=(); locals=()
 while IFS=$'\t' read -r kind value path extra || [[ -n "$kind" ]]; do
   case "$kind" in ''|'#'*) continue ;; esac
   [[ -z "$extra" ]] || die "too many fields in manifest"
@@ -39,6 +39,7 @@ while IFS=$'\t' read -r kind value path extra || [[ -n "$kind" ]]; do
     repository) [[ -z "$repository" && -n "$value" && -z "$path" && "$value" != -* ]] || die "invalid repository row"; repository="$value" ;;
     ref) [[ -z "$branch" && -n "$value" && -z "$path" ]] || die "invalid ref row"; branch="$value" ;;
     commit) [[ -z "$baseline" && "$value" =~ ^[0-9a-f]{40}$ && -z "$path" ]] || die "invalid commit row"; baseline="$value" ;;
+    root) [[ -z "$root" && -z "$path" ]] && valid_path "$value" || die "invalid root row"; root="$value" ;;
     skill|local)
       valid_name "$value" || die "invalid skill name in manifest: $value"
       for existing in "${names[@]}" "${locals[@]}"; do
@@ -79,8 +80,15 @@ git clone --quiet --no-checkout -- "$repository" "$stage/upstream"
 next_commit="$(git -C "$stage/upstream" rev-parse --verify "$target^{commit}")" || die "upstream ref not found: $target"
 git -C "$stage/upstream" cat-file -e "$baseline^{commit}" || die "baseline commit is missing upstream: $baseline"
 mkdir "$stage/base" "$stage/next"
-git -C "$stage/upstream" archive "$baseline" | tar -xf - -C "$stage/base"
-git -C "$stage/upstream" archive "$next_commit" | tar -xf - -C "$stage/next"
+# A root row names the upstream folder that holds skills/ and LICENSE.
+for side in base next; do
+  if [[ "$side" == base ]]; then commit="$baseline"; else commit="$next_commit"; fi
+  if [[ -n "$root" ]]; then
+    git -C "$stage/upstream" cat-file -e "$commit:$root" 2>/dev/null || die "upstream root $root is missing at $commit"
+    commit="$commit:$root"
+  fi
+  git -C "$stage/upstream" archive "$commit" | tar -xf - -C "$stage/$side"
+done
 
 # Do not follow links or copy devices from upstream or from edited local skills.
 check_tree() {
@@ -189,6 +197,7 @@ merge_file "$stage/base/LICENSE" "$group/LICENSE" "$stage/next/LICENSE" "$stage/
 {
   printf '# Copied skills. See docs/skills-sync.md for the manifest format.\n'
   printf 'repository\t%s\nref\t%s\ncommit\t%s\n' "$repository" "$branch" "$next_commit"
+  [[ -z "$root" ]] || printf 'root\t%s\n' "$root"
   for ((index=0; index<${#names[@]}; index++)); do printf 'skill\t%s\t%s\n' "${names[$index]}" "${paths[$index]}"; done
   for name in "${locals[@]}"; do printf 'local\t%s\n' "$name"; done
 } > "$stage/result/upstream.tsv"
