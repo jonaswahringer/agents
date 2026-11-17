@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>delta-flume Overview</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --c-fg: var(--foreground, #1c1c21);
+    --c-muted: var(--muted-foreground, #6e6e78);
+    --c-card: var(--card, #ffffff);
+    --c-border: var(--border, #dcdce2);
+    --c-soft: var(--secondary, #eeeef2);
+    --c-purpose: var(--info, #2f6fde);
+    --c-policy: var(--warning, #d9822b);
+    --c-human: var(--destructive, #d64545);
+    --c-radius: var(--radius, 8px);
+    --c-d: var(--success, #1f9d55);
+    --c-s: var(--chart-4, #8b5cf6);
+    --c-h: var(--destructive, #d64545);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-fg: var(--foreground, #ececf1);
+      --c-muted: var(--muted-foreground, #9a9aa6);
+      --c-card: var(--card, #17171c);
+      --c-border: var(--border, #2e2e36);
+      --c-soft: var(--secondary, #24242c);
+    }
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  h2 { font-size: 12px; margin: 0 0 8px; color: var(--c-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .sub { color: var(--c-muted); font-size: 13px; margin: 3px 0 0; }
+  a { color: var(--c-purpose); }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans, system-ui, sans-serif); fill: var(--c-fg); }
+  .col { font-size: 13px; font-weight: 700; fill: var(--c-muted) !important; letter-spacing: .06em; }
+  .t { font-size: 15px; font-weight: 650; }
+  .s { font-size: 12.5px; fill: var(--c-muted) !important; }
+  .e { font-size: 12.5px; font-weight: 600; fill: var(--c-muted) !important; }
+  .hum { font-size: 12.5px; font-weight: 700; fill: var(--c-human) !important; }
+
+  .outside { fill: var(--c-card); stroke: var(--c-fg); stroke-width: 1.3; }
+  .shared { fill: none; stroke: var(--c-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .policy { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; }
+  .vessel { fill: var(--c-card); stroke: var(--c-purpose); stroke-width: 2.2; }
+  .gw { fill: var(--c-policy); fill-opacity: .3; stroke: none; }
+  .exit { fill: var(--c-card); stroke: var(--c-muted); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+  .bus { stroke: var(--c-muted); stroke-width: 2.5; fill: none; }
+  .dash { stroke-dasharray: 5 4; }
+
+  .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .legend section { border: 1px solid var(--c-border); border-radius: var(--c-radius); padding: 10px 14px; }
+  .row { display: grid; grid-template-columns: 44px 1fr; gap: 10px; align-items: start; font-size: 13px; margin: 6px 0; line-height: 1.35; }
+  .sw { width: 26px; height: 16px; margin-top: 1px; }
+  .sw.outside { border: 1.3px solid var(--c-fg); border-radius: 4px; }
+  .sw.shared { border: 1.5px dashed var(--c-muted); border-radius: 4px; }
+  .sw.vessel { border: 2.2px solid var(--c-purpose); border-radius: 5px; position: relative; overflow: hidden; }
+  .sw.vessel::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px; background: color-mix(in srgb, var(--c-policy) 45%, transparent); }
+  .sw.policy { width: 13px; height: 13px; border: 2px solid var(--c-policy); transform: rotate(45deg); margin: 2px 0 0 6px; }
+  .sw.mech { background: var(--c-soft); border: 1.3px solid var(--c-muted); border-radius: 4px; }
+  .sw.exit { border: 1.3px dashed var(--c-muted); border-radius: 4px; }
+  .sw.hum { width: auto; height: auto; color: var(--c-human); font-weight: 700; font-size: 11px; border: 1.5px solid var(--c-human); border-radius: 9px; padding: 0 6px; justify-self: start; }
+  .kind text { font-size: 11px; font-weight: 800; fill: #fff !important; }
+  .kind.d circle { fill: var(--c-d); } .kind.s circle { fill: var(--c-s); } .kind.h circle { fill: var(--c-h); }
+  .k.d { background: var(--c-d); } .k.s { background: var(--c-s); } .k.h { background: var(--c-h); }
+  .k { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; }
+  @media (max-width: 640px) { .legend { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>delta-flume: the big picture</h1>
+    <p class="sub">Many triggers, one shared triage for the loose ones, several vessels, and every vessel leaves a record.</p>
+  </div>
+
+  <svg viewBox="0 0 1000 520" role="img" aria-label="Triggers flow into vessels: typed triggers directly, loose triggers through shared triage and a human route; vessels produce output">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
+      </marker>
+    </defs>
+
+    <!-- column titles -->
+    <text class="col" x="10" y="24">TRIGGERS</text>
+    <text class="col" x="225" y="24">TRIAGE (SHARED)</text>
+    <text class="col" x="500" y="24">VESSELS</text>
+    <text class="col" x="830" y="24">OUTPUT</text>
+
+    <!-- triggers -->
+    <rect class="outside" x="10" y="40" width="190" height="180" rx="8"/>
+    <text class="t" x="22" y="64">Typed</text>
+    <g class="kind d"><circle cx="200" cy="40" r="8.5"/><text x="200" y="44" text-anchor="middle">d</text></g>
+    <text class="s" x="22" y="84">the channel names the vessel</text>
+    <text class="s" x="22" y="112">schedule</text>
+    <text class="s" x="22" y="132">security advisory</text>
+    <text class="s" x="22" y="152">opened PR, failed CI</text>
+    <text class="s" x="22" y="172">assigned issue</text>
+    <text class="s" x="22" y="192">a human's go</text>
+    <text class="s" x="22" y="210">…</text>
+
+    <rect class="outside" x="10" y="270" width="190" height="160" rx="8"/>
+    <text class="t" x="22" y="294">Loose</text>
+    <text class="s" x="22" y="314">no clear route yet</text>
+    <text class="s" x="22" y="342">email</text>
+    <text class="s" x="22" y="362">support request</text>
+    <text class="s" x="22" y="382">bug report, chat message</text>
+    <text class="s" x="22" y="402">idea</text>
+    <text class="s" x="22" y="420">…</text>
+
+    <!-- triage: shared, loose triggers only -->
+    <rect class="shared" x="225" y="250" width="225" height="200" rx="12"/>
+    <text class="s" x="238" y="272">loose triggers only</text>
+    <rect class="mech" x="238" y="288" width="140" height="46" rx="8"/>
+    <text class="t" x="250" y="308">Triage</text>
+    <g class="kind s"><circle cx="358" cy="288" r="8.5"/><text x="358" y="292" text-anchor="middle">s</text></g><g class="kind h"><circle cx="378" cy="288" r="8.5"/><text x="378" y="292" text-anchor="middle">h</text></g>
+    <text class="s" x="250" y="325">agent or person, e.g. tiro</text>
+    <path class="policy" d="M405,340 L442,368 L405,396 L368,368 Z"/>
+    <text class="t" x="405" y="373" text-anchor="middle">Route</text>
+    <g class="kind h"><circle cx="428" cy="344" r="8.5"/><text x="428" y="348" text-anchor="middle">h</text></g>
+
+    <rect class="exit" x="235" y="480" width="95" height="32" rx="6"/>
+    <text class="t" x="252" y="501">Backlog</text>
+    <rect class="exit" x="340" y="480" width="110" height="32" rx="6"/>
+    <text class="t" x="354" y="501">Quarantine</text>
+
+    <!-- edges into triage and out -->
+    <path class="edge" d="M200,311 H236"/>
+    <path class="edge" d="M330,334 V368 H366"/>
+    <path class="edge" d="M265,334 V478"/>
+    <text class="e" x="271" y="440">parked</text>
+    <path class="edge" d="M355,334 V478"/>
+    <text class="e" x="361" y="440">spam</text>
+    <path class="edge" d="M442,368 H473"/>
+    <text class="e" x="412" y="415">approved:</text>
+    <text class="e" x="412" y="431">now typed</text>
+
+    <!-- typed triggers straight to the vessel bus -->
+    <path class="edge" d="M200,130 H473"/>
+
+    <!-- bus into vessels -->
+    <line class="bus" x1="475" y1="72" x2="475" y2="372"/>
+    <path class="edge" d="M475,72 H498"/>
+    <path class="edge" d="M475,132 H498"/>
+    <path class="edge" d="M475,192 H498"/>
+    <path class="edge" d="M475,252 H498"/>
+    <path class="edge" d="M475,312 H498"/>
+
+    <!-- vessels -->
+    <rect class="vessel" x="500" y="48" width="300" height="48" rx="10"/>
+    <rect class="gw" x="501" y="49" width="16" height="46" rx="8"/>
+    <text class="t" x="528" y="69">Maintenance (SWE)</text>
+    <text class="s" x="528" y="87">keep software secure, up to date and working</text>
+
+    <rect class="vessel" x="500" y="108" width="300" height="48" rx="10"/>
+    <rect class="gw" x="501" y="109" width="16" height="46" rx="8"/>
+    <text class="t" x="528" y="129">Implement (SWE)</text>
+    <text class="s" x="528" y="147">turn an agreed change into working, verified code</text>
+
+    <rect class="vessel" x="500" y="168" width="300" height="48" rx="10"/>
+    <rect class="gw" x="501" y="169" width="16" height="46" rx="8"/>
+    <text class="t" x="528" y="189">Testing (SWE)</text>
+    <text class="s" x="528" y="207">keep tests up to date, compact and sharp</text>
+
+    <rect class="vessel" x="500" y="228" width="300" height="48" rx="10"/>
+    <rect class="gw" x="501" y="229" width="16" height="46" rx="8"/>
+    <text class="t" x="528" y="249">Prototype (UI/UX)</text>
+    <text class="s" x="528" y="267">prototype designs to try out UI and UX ideas</text>
+
+    <rect class="vessel" x="500" y="288" width="300" height="48" rx="10"/>
+    <rect class="gw" x="501" y="289" width="16" height="46" rx="8"/>
+    <text class="t" x="528" y="309">Meta</text>
+    <text class="s" x="528" y="327">improve the process, architecture or vessels</text>
+
+    <!-- vessels -> land -> output -->
+    <line class="bus" x1="822" y1="72" x2="822" y2="312"/>
+    <path class="edge" d="M800,72 H820"/>
+    <path class="edge" d="M800,132 H820"/>
+    <path class="edge" d="M800,192 H820"/>
+    <path class="edge" d="M800,252 H820"/>
+    <path class="edge" d="M800,312 H820"/>
+    <path class="edge" d="M822,222 H836"/>
+    <path class="policy" d="M872,192 L908,222 L872,252 L836,222 Z"/>
+    <text class="t" x="872" y="227" text-anchor="middle">Land</text>
+    <g class="kind h"><circle cx="890" cy="194" r="8.5"/><text x="890" y="198" text-anchor="middle">h</text></g><g class="kind d"><circle cx="909" cy="202" r="8.5"/><text x="909" y="206" text-anchor="middle">d</text></g>
+    <path class="edge" d="M872,252 V290"/>
+    <rect class="outside" x="832" y="292" width="160" height="62" rx="8"/>
+    <text class="t" x="844" y="315">Output</text>
+    <g class="kind d"><circle cx="990" cy="292" r="8.5"/><text x="990" y="296" text-anchor="middle">d</text></g>
+    <text class="s" x="844" y="335">PRs, reports, issues</text>
+  </svg>
+
+  <div class="legend">
+    <section>
+      <h2>Shapes</h2>
+      <div class="row"><span class="sw outside"></span><span><b>Outside the vessels</b>: triggers and output.</span></div>
+      <div class="row"><span class="sw shared"></span><span><b>Shared service</b>: triage. All vessels use it; none owns it.</span></div>
+      <div class="row"><span class="sw vessel"></span><span><b>Vessel</b>: one responsibility. The orange strip is its gateway (input policy: accept the unit, start when the vessel is ready).</span></div>
+    </section>
+    <section>
+      <h2>Inside the shapes</h2>
+      <div class="row"><span class="sw policy"></span><span><b>Decision</b>: a unit moves on only if it passes.</span></div>
+      <div class="row"><span class="sw mech"></span><span><b>Agent or tool</b>: does the work.</span></div>
+      <div class="row"><span class="sw exit"></span><span><b>Exit</b>: a unit leaves without reaching a vessel.</span></div>
+      <div class="row"><span></span><span><b>Kind of part</b>: <span class="k d">d</span> deterministic, <span class="k s">s</span> stochastic, <span class="k h">h</span> human.</span></div>
+    </section>
+  </div>
+  <p class="sub"><b style="color:var(--c-fg)">Record.</b> Every vessel leaves a trace of source, reasoning and decision for each unit. Where it lives is up to the vessel's mechanism: a PR, the code and its git history, an issue, or a log.</p>
+  <p class="sub">The inside of one vessel (gateway, agent loop, land) is drawn in <a href="blueprint.html">blueprint.html</a>.</p>
+</div>
+</body>
+</html>
