@@ -42,13 +42,13 @@ Trigger ─► Gateway ─────► Agent loop ─────────
            Accept         Write ─► Verify ─► Findings ─ none ─┘    │
            Start            ▲  ▲                │                  ├─ changes requested ─► back to Write
              │              │  └─── findings ───┘                  └─ rejected ─► closed
-             └─ not accepted ─► logged    (not started yet: waits)
+             └─ not accepted ─► logged    (not started yet: queue)
 
 Watcher: tracks tokens, time and silence in the loop. Budget spent ─► dead letters.
 ```
 
 | Unit | One piece of work. The framework says "unit"; each vessel names its own kind, such as a finding or a message. |
-| Gateway | The vessel's input policy, fully deterministic. **Accept** judges the unit: it declines a duplicate without new input, a superseded unit, or incomplete input (and asks for what's missing). Duplicates are found by an **idempotency key** taken from the unit, not from the run. **Start** judges the vessel: when it's overloaded or paused, the unit waits in a queue. Whether a unit belongs to this vessel is settled before it arrives, by the trigger's channel or a human route. |
+| Gateway | The vessel's input policy, fully deterministic. **Accept** judges the unit: it declines a duplicate without new input, a superseded unit, or incomplete input (and asks for what's missing). Duplicates are found by an **idempotency key** taken from the unit, not from the run. **Start** judges the vessel: when it's overloaded or paused, the unit waits in a queue; each vessel picks its order. Whether a unit belongs to this vessel is settled before it arrives, by the trigger's channel or a human route. |
 | Agent loop | The mechanism. **Write** (agents and tools) makes a change, **Verify** checks it, and each finding goes back to Write. The loop ends when no findings are left. |
 | Verify | Cheapest checks first, after poteto's pyramid: static analysis and tests (d), runtime verification (d), then a review agent checking prose rules and skills (s). Humans don't verify inside the loop; they decide at Land. A well-designed codebase makes every check cheaper. |
 | Retry budget | How much a unit may spend in the loop, measured in tokens and time. |
@@ -85,3 +85,4 @@ To add a vessel, copy [template.md](template.md).
 
 - When a unit is done.
 - Retry budget numbers.
+- Queue order: first come first served, by priority, or something else. Each vessel decides for now.
