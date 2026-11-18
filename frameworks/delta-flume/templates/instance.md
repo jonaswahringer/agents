@@ -5,7 +5,7 @@ status: active
 
 # <Name> vessel in <project>
 
-<!-- Copy to <project>/vessels/<name>.md. The vessel's purpose and policy live in its type file, frameworks/delta-flume/vessels/<name>.md; write here only what is true for this project. The how (commands, runtime check, env var names) goes in the project's AGENTS.md. status is active or paused; while paused, Start sends units to the queue. -->
+<!-- Copy to <project>/vessels/<name>.md. The vessel's purpose and policy live in its type file, vessels/<name>.md in delta-flume; write here only what is true for this project. The how (commands, runtime check, env var names) goes in the project's AGENTS.md. status is active or paused; while paused, Start sends units to the queue. -->
 
 ## Here
 

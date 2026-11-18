@@ -1,5 +1,7 @@
 # delta-flume (v0)
 
+Developed in [jonaswahringer/agents](https://github.com/jonaswahringer/agents/tree/main/frameworks/delta-flume). [jonaswahringer/delta-flume](https://github.com/jonaswahringer/delta-flume) is a read-only copy, so send issues and PRs to agents.
+
 A framework for agent work that stays the same while tools change. A **delta** fans one stream of triggers out to many vessels; a **flume** carries each unit to where the work happens. Each responsibility gets a **vessel**: a fixed shape that today's agents and tools fill.
 
 ## Files
@@ -14,6 +16,7 @@ A framework for agent work that stays the same while tools change. A **delta** f
 | [diagrams/blueprint.html](diagrams/blueprint.html) | The inside of one vessel. |
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [diagrams/why-vessels.html](diagrams/why-vessels.html) | One slide on why vessels beat role-based agents. |
+| [LICENSE](LICENSE) | MIT. |
 
 ## Layers
 
