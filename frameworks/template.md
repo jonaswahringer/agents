@@ -16,7 +16,7 @@
 
 ### Gateway
 
-<!-- Accept: when does it decline a unit (duplicate without new input, superseded, incomplete)? Start: when does a unit wait (overloaded, paused)? -->
+<!-- Accept: when does it decline a unit (duplicate without new input, superseded, incomplete)? Start: when does a unit wait (overloaded, paused)? Estimate: see Retry budget. -->
 
 ### Verify
 
@@ -24,7 +24,7 @@
 
 ### Retry budget
 
-<!-- How many tokens and how much time may a unit spend before it counts as stuck? -->
+<!-- How is a unit's size estimated (a deterministic number, or an agent)? What multiple of the estimate is the hard ceiling? -->
 
 ### Land
 
