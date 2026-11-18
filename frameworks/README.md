@@ -83,7 +83,7 @@ An agent's verdict never moves a unit past a decision on its own.
 
 | Vessel | Purpose |
 |---|---|
-| Maintenance (SWE) | keep software secure, up to date and working |
+| [Maintenance (SWE)](maintenance/vessel.md) | keep software secure, up to date and working |
 | Implement (SWE) | turn an agreed change into working, verified code |
 | Testing (SWE) | keep a project's tests up to date and compact, for example snapshot tests, and sharpen the suite over time |
 | Prototype (UI/UX) | prototype designs to try out UI and UX ideas |
