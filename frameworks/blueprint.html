@@ -29,7 +29,7 @@
     }
   }
   body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
-  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+  .wrap { max-width: 1110px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
   h1 { font-size: 16px; margin: 0; font-weight: 650; }
   h2 { font-size: 12px; margin: 0 0 8px; color: var(--c-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
   .sub { color: var(--c-muted); font-size: 13px; margin: 3px 0 0; }
@@ -89,7 +89,7 @@
     <p class="sub">Every vessel follows this blueprint. Only the purpose, and the policy and mechanism that serve it, differ.</p>
   </div>
 
-  <svg viewBox="0 0 1000 430" role="img" aria-label="Vessel blueprint: a trigger passes the gateway, the agent loop writes and verifies until no findings are left, then Land decides whether output leaves the vessel">
+  <svg viewBox="0 0 1110 430" role="img" aria-label="Vessel blueprint: a trigger passes the gateway, which estimates its size, the agent loop writes and verifies until no findings are left, then Land decides whether output leaves the vessel">
     <defs>
       <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
@@ -103,11 +103,11 @@
     <text class="t" x="230" y="31" text-anchor="middle">Logged</text>
 
     <!-- vessel -->
-    <rect class="vessel" x="150" y="60" width="720" height="310" rx="16"/>
+    <rect class="vessel" x="150" y="60" width="830" height="310" rx="16"/>
     <text class="vessel-t" x="164" y="84">Vessel</text>
 
     <!-- gateway -->
-    <rect class="gateway" x="165" y="95" width="230" height="260" rx="10"/>
+    <rect class="gateway" x="165" y="95" width="340" height="260" rx="10"/>
     <text class="gateway-t" x="177" y="343">Gateway</text>
 
     <path class="edge" d="M130,170 H190"/>
@@ -129,11 +129,17 @@
     <g class="kind d"><circle cx="375" cy="255" r="8.5"/><text x="375" y="259" text-anchor="middle">d</text></g>
     <path class="edge" d="M295,273 H282 V189 H313"/>
 
+    <path class="edge" d="M373,170 H393"/>
+    <rect class="mech" x="395" y="150" width="96" height="40" rx="8"/>
+    <text class="t" x="443" y="175" text-anchor="middle">Estimate</text>
+    <g class="kind d"><circle cx="473" cy="150" r="8.5"/><text x="473" y="154" text-anchor="middle">d</text></g><g class="kind s"><circle cx="491" cy="150" r="8.5"/><text x="491" y="154" text-anchor="middle">s</text></g>
+
+    <g transform="translate(110,0)">
     <!-- agent loop: a circle of write -> verify -> findings -> write -->
     <rect class="loop" x="410" y="95" width="325" height="260" rx="10"/>
     <text class="loop-t" x="422" y="343">Agent loop</text>
 
-    <path class="edge" d="M373,170 H443"/>
+    <path class="edge" d="M381,170 H443"/>
     <rect class="mech" x="445" y="150" width="90" height="40" rx="8"/>
     <text class="t" x="490" y="175" text-anchor="middle">Write</text>
     <g class="kind s"><circle cx="445" cy="150" r="8.5"/><text x="445" y="154" text-anchor="middle">s</text></g><g class="kind d"><circle cx="463" cy="150" r="8.5"/><text x="463" y="154" text-anchor="middle">d</text></g>
@@ -155,7 +161,7 @@
     <text class="t" x="805" y="31" text-anchor="middle">Dead letters</text>
     <g class="kind h"><circle cx="875" cy="9" r="8.5"/><text x="875" y="13" text-anchor="middle">h</text></g>
     <path class="edge" d="M805,110 V46"/>
-    <text class="e" x="811" y="84">budget spent</text>
+    <text class="e" x="799" y="84" text-anchor="end">stuck or over ceiling</text>
     <rect class="policy-dash" x="755" y="110" width="100" height="40" rx="8"/>
     <text class="t" x="805" y="135" text-anchor="middle">Watcher</text>
     <g class="kind d"><circle cx="855" cy="110" r="8.5"/><text x="855" y="114" text-anchor="middle">d</text></g>
@@ -178,6 +184,7 @@
     <text class="e" x="809" y="360">rejected</text>
     <rect class="exit" x="753" y="380" width="100" height="36" rx="6"/>
     <text class="t" x="803" y="403" text-anchor="middle">Closed</text>
+    </g>
   </svg>
 
   <div class="legend">
@@ -201,6 +208,7 @@
       <div class="row"><b>Trigger</b><span>Typed, or loose and routed by a human through triage.</span></div>
       <div class="row"><b>Accept</b><span>Judges the unit. Declines a duplicate without new input, a superseded unit, or incomplete input, and asks for what's missing. Declined units are logged.</span></div>
       <div class="row"><b>Start</b><span>Judges the vessel. While it's overloaded or paused, the unit waits in the queue. Each vessel picks the order.</span></div>
+      <div class="row"><b>Estimate</b><span>Estimates the unit's size: the spend it is expected to need, in tokens and time. Deterministic when a number exists, such as the lines changed between two dependency versions. Otherwise an agent estimates.</span></div>
       <div class="row"><b>Write</b><span>Agents and tools, such as agent CLIs and the runtime, make a change.</span></div>
       <div class="row"><b>Verify</b><span>Checks the change, cheapest first (after poteto's pyramid; a well-designed codebase makes every check cheaper):
         <ul class="ladder">
@@ -209,7 +217,7 @@
           <li><span class="k s">s</span> review agent, against prose rules and skills</li>
         </ul></span></div>
       <div class="row"><b>Findings</b><span>Each finding goes back to Write with its reason. None left: on to Land.</span></div>
-      <div class="row"><b>Watcher</b><span>Watches what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to dead letters, and a human is notified. The heavier the unit (criticality × urgency), the smaller its budget, so a human steps in sooner.</span></div>
+      <div class="row"><b>Watcher</b><span>Watches what the loop spends (tokens and time) against the estimate. The loop works alone until Land, and a human can step in at any time. Over the estimate: a human is notified, sooner for heavier units. Stuck (no progress, long silence) or over the hard ceiling, a multiple of the estimate: the unit moves to dead letters, and a human is notified.</span></div>
       <div class="row"><b>Land</b><span>A human decides by default. A reversible class of work can be allow-listed to land on deterministic checks alone. Changes requested go back into the loop as findings. Rejected output is closed and recorded.</span></div>
       <div class="row"><b>Output</b><span>A PR, a report, an issue.</span></div>
       <div class="row"><b>Record</b><span>Every step leaves a trace of source, reasoning and decision. Where it lives is up to the mechanism: a PR, git history, an issue, or a log.</span></div>

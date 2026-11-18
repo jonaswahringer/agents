@@ -41,30 +41,33 @@ Loose trigger ─► Triage ─► Route (human) ─────┘
 Trigger ─► Gateway ─────► Agent loop ────────────────────────► Land ─► Output
            Accept         Write ─► Verify ─► Findings ─ none ─┘    │
            Start            ▲  ▲                │                  ├─ changes requested ─► back to Write
-             │              │  └─── findings ───┘                  └─ rejected ─► closed
+           Estimate         │  └─── findings ───┘                  └─ rejected ─► closed
+             │
              └─ not accepted ─► logged    (not started yet: queue)
 
-Watcher: tracks tokens, time and silence in the loop. Budget spent ─► dead letters.
+Watcher: tracks tokens and time against the estimate, and silence.
+         Over the estimate ─► a human is notified. Stuck or over the ceiling ─► dead letters.
 ```
 
 | Unit | One piece of work. The framework says "unit"; each vessel names its own kind, such as a finding or a message. |
-| Gateway | The vessel's input policy, fully deterministic. **Accept** judges the unit: it declines a duplicate without new input, a superseded unit, or incomplete input (and asks for what's missing). Duplicates are found by an **idempotency key** taken from the unit, not from the run. **Start** judges the vessel: when it's overloaded or paused, the unit waits in a queue; each vessel picks its order. Whether a unit belongs to this vessel is settled before it arrives, by the trigger's channel or a human route. |
-| Agent loop | The mechanism. **Write** (agents and tools) makes a change, **Verify** checks it, and each finding goes back to Write. The loop ends when no findings are left. |
+| Gateway | The vessel's input policy. **Accept** judges the unit: it declines a duplicate without new input, a superseded unit, or incomplete input (and asks for what's missing). Duplicates are found by an **idempotency key** taken from the unit, not from the run. **Start** judges the vessel: when it's overloaded or paused, the unit waits in a queue; each vessel picks its order. **Estimate** sets the unit's size (see Measures): deterministic when a number exists, otherwise an agent estimates. Accept and Start are deterministic. Whether a unit belongs to this vessel is settled before it arrives, by the trigger's channel or a human route. |
+| Agent loop | The mechanism. **Write** (agents and tools) makes a change, **Verify** checks it, and each finding goes back to Write. The loop ends when no findings are left. It works alone until Land, and a human can step in at any time. |
 | Verify | Cheapest checks first, after poteto's pyramid: static analysis and tests (d), runtime verification (d), then a review agent checking prose rules and skills (s). Humans don't verify inside the loop; they decide at Land. A well-designed codebase makes every check cheaper. |
-| Retry budget | How much a unit may spend in the loop, measured in tokens and time. It shrinks as the unit's weight grows. |
-| Watcher | Tracks what the loop spends: tokens, time, and long silence. When the retry budget is spent, it moves the unit to the dead-letter queue. |
+| Retry budget | What a unit may spend in the loop, in tokens and time. The estimate is the expected spend, and a hard ceiling sits at a multiple of it. |
+| Watcher | Tracks what the loop spends against the estimate. Over the estimate, a human is notified and can step in. Stuck (no progress, long silence) or over the ceiling, the unit moves to the dead-letter queue. |
 | Dead-letter queue | Stuck units. A human is notified. |
 | Land | Decides whether output lands. A human decides by default. A reversible class of work can be allow-listed to land on deterministic checks alone. The allow-list is empty for now. Changes requested go back into the loop as findings; a rejected unit is closed and recorded. |
 | Record | Every vessel leaves a trace of source, reasoning and decision for each unit. Where it lives is mechanism: a PR, the code and its git history, an issue, or a log. |
 
 ## Measures
 
-Lines of code say little about a unit. Two measures do:
+Three measures, kept apart: how much a unit matters, how much work it is, and what it has used.
 
 | Measure | Made of | Set by | Used for |
 |---|---|---|---|
-| **Weight** | criticality × urgency, on four levels: low, normal, high, critical | the trigger when typed (for example a CVE's severity score), or triage and a human route when loose | order: heavier units go first. Budget: the heavier the unit, the smaller its retry budget, so a human is pulled in sooner to supervise or step in |
-| **Spend** | tokens and time | the watcher | knowing when the retry budget is spent |
+| **Weight** | criticality × urgency, on four levels: low, normal, high, critical | the trigger when typed (for example a CVE's severity score), or triage and a human route when loose | attention: the heavier the unit, the sooner a human is notified |
+| **Size** | expected spend, in tokens and time | the gateway's Estimate: deterministic when a number exists (for example lines changed between two dependency versions), otherwise an agent | the retry budget: a bigger unit gets more |
+| **Spend** | tokens and time used | the watcher | comparing against the estimate and the ceiling |
 
 ## Kinds of part
 
@@ -93,5 +96,5 @@ To add a vessel, copy [template.md](template.md).
 ## Open
 
 - When a unit is done.
-- Retry budget numbers.
-- Queue order: first come first served, by priority, or something else. Each vessel decides for now.
+- The ceiling multiple, and how size is estimated per vessel.
+- Queue order: first come first served, by weight, or something else. Each vessel decides for now.
