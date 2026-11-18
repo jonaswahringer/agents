@@ -6,6 +6,7 @@ A framework for agent work that stays the same while tools change. A **delta** f
 - [blueprint.html](blueprint.html): the inside of one vessel.
 - [comparison.html](comparison.html): a one-slide comparison with a typical software factory.
 - [vessels.html](vessels.html): a one-slide look at vessels and why they beat role-based agents.
+- [new-instance.md](new-instance.md): how to set up a vessel in a project.
 
 ## Layers
 
@@ -107,7 +108,7 @@ A project that runs vessels keeps the what apart from the how.
 
 | File | Holds | Layer |
 |---|---|---|
-| `vessels/<name>.md` | the vessel type, active or paused, what it does here, its scope, and any policy overrides. Copy [instance.md](instance.md). | purpose, policy |
+| `vessels/<name>.md` | the vessel type, active or paused, what it does here, its scope, and any policy overrides. Follow [new-instance.md](new-instance.md). | purpose, policy |
 | `AGENTS.md` | the commands to build and test, the runtime check, and the env vars and secrets a vessel needs: their names and where each comes from, never the values | mechanism |
 
 The agent loop gets the type file, the instance file and the project's AGENTS.md. Agents load AGENTS.md on their own, so the how has one home.
