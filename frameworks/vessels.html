@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vessels, Not Roles</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --c-fg: var(--foreground, #1c1c21);
+    --c-muted: var(--muted-foreground, #6e6e78);
+    --c-card: var(--card, #ffffff);
+    --c-border: var(--border, #dcdce2);
+    --c-soft: var(--secondary, #eeeef2);
+    --c-purpose: var(--info, #2f6fde);
+    --c-policy: var(--warning, #d9822b);
+    --c-radius: var(--radius, 8px);
+    --c-d: var(--success, #1f9d55);
+    --c-s: var(--chart-4, #8b5cf6);
+    --c-h: var(--destructive, #d64545);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-fg: var(--foreground, #ececf1);
+      --c-muted: var(--muted-foreground, #9a9aa6);
+      --c-card: var(--card, #17171c);
+      --c-border: var(--border, #2e2e36);
+      --c-soft: var(--secondary, #24242c);
+    }
+  }
+  :root[data-theme="dark"] {
+    --c-fg: var(--foreground, #ececf1);
+    --c-muted: var(--muted-foreground, #9a9aa6);
+    --c-card: var(--card, #17171c);
+    --c-border: var(--border, #2e2e36);
+    --c-soft: var(--secondary, #24242c);
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
+  .slide { max-width: 1100px; margin: 0 auto; padding: 4px 0; display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  .sub { color: var(--c-muted); font-size: 14px; margin: 4px 0 0; }
+  a { color: var(--c-purpose); }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .panel { border: 1px solid var(--c-border); border-radius: calc(var(--c-radius) + 4px); background: var(--c-card); padding: 14px 16px 12px; }
+  .panel.ours { border: 2px solid var(--c-purpose); }
+  .panel h2 { font-size: 13px; margin: 0 0 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--c-muted); }
+  .panel.ours h2 { color: var(--c-purpose); }
+  .panel p { font-size: 14px; margin: 0 0 10px; }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans, system-ui, sans-serif); fill: var(--c-fg); }
+  .t { font-size: 15px; font-weight: 650; }
+  .t2 { font-size: 13.5px; font-weight: 650; }
+  .s { font-size: 12.5px; fill: var(--c-muted) !important; }
+  .e { font-size: 12.5px; font-weight: 600; fill: var(--c-muted) !important; }
+  .q { font-size: 12.5px; font-weight: 700; fill: var(--c-h) !important; }
+
+  .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .vessel-o { fill: none; stroke: var(--c-purpose); stroke-width: 2.4; }
+  .vessel-t { fill: var(--c-purpose) !important; font-size: 15px; font-weight: 700; }
+  .gateway { fill: var(--c-policy); fill-opacity: .1; stroke: var(--c-policy); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .gateway-t { fill: var(--c-policy) !important; font-size: 14px; font-weight: 700; }
+  .loop { fill: var(--c-soft); fill-opacity: .5; stroke: var(--c-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .loop-t { font-size: 14px; font-weight: 700; }
+  .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+
+  .kind text { font-size: 11px; font-weight: 800; fill: #fff !important; }
+  .kind.d circle { fill: var(--c-d); } .kind.s circle { fill: var(--c-s); } .kind.h circle { fill: var(--c-h); }
+  .k { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; vertical-align: -3px; }
+  .k.d { background: var(--c-d); } .k.s { background: var(--c-s); } .k.h { background: var(--c-h); }
+
+  .diff { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .diff section { border: 1px solid var(--c-border); border-radius: var(--c-radius); background: var(--c-card); padding: 10px 12px; font-size: 13px; line-height: 1.4; }
+  .diff h3 { font-size: 12px; margin: 0 0 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--c-muted); }
+  .diff .was { color: var(--c-muted); margin: 0 0 6px; }
+  .diff .now { margin: 0; padding-left: 8px; border-left: 3px solid var(--c-purpose); }
+  .diff .who { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .diff .now .who { color: var(--c-purpose); }
+  .foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; color: var(--c-muted); font-size: 12.5px; }
+  @media (max-width: 760px) { .pair { grid-template-columns: 1fr; } .diff { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px) { .diff { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="slide">
+  <div>
+    <h1>Vessels, not roles</h1>
+    <p class="sub">Role-based setups copy a human team: one agent per job title, then more agents to check the agents. A vessel starts from the responsibility instead.</p>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <div class="pair">
+    <div class="panel">
+      <h2>Role-based agents</h2>
+      <p>Agents named after job titles pass work around and judge each other. Who owns the outcome?</p>
+      <svg viewBox="0 0 520 320" role="img" aria-label="Six role agents (planner, coder, tester, reviewer, critic, judge) pass work back and forth; nobody clearly owns the outcome or breaks ties">
+        <rect class="mech" x="20" y="20" width="110" height="40" rx="8"/>
+        <text class="t2" x="75" y="45" text-anchor="middle">Planner</text>
+        <g class="kind s"><circle cx="130" cy="20" r="8.5"/><text x="130" y="24" text-anchor="middle">s</text></g>
+
+        <rect class="mech" x="205" y="20" width="110" height="40" rx="8"/>
+        <text class="t2" x="260" y="45" text-anchor="middle">Coder</text>
+        <g class="kind s"><circle cx="315" cy="20" r="8.5"/><text x="315" y="24" text-anchor="middle">s</text></g>
+
+        <rect class="mech" x="390" y="20" width="110" height="40" rx="8"/>
+        <text class="t2" x="445" y="45" text-anchor="middle">Tester</text>
+        <g class="kind s"><circle cx="500" cy="20" r="8.5"/><text x="500" y="24" text-anchor="middle">s</text></g>
+
+        <rect class="mech" x="20" y="150" width="110" height="40" rx="8"/>
+        <text class="t2" x="75" y="175" text-anchor="middle">Reviewer</text>
+        <g class="kind s"><circle cx="130" cy="150" r="8.5"/><text x="130" y="154" text-anchor="middle">s</text></g>
+
+        <rect class="mech" x="205" y="150" width="110" height="40" rx="8"/>
+        <text class="t2" x="260" y="175" text-anchor="middle">Critic</text>
+        <g class="kind s"><circle cx="315" cy="150" r="8.5"/><text x="315" y="154" text-anchor="middle">s</text></g>
+
+        <rect class="mech" x="390" y="150" width="110" height="40" rx="8"/>
+        <text class="t2" x="445" y="175" text-anchor="middle">Judge</text>
+        <g class="kind s"><circle cx="500" cy="150" r="8.5"/><text x="500" y="154" text-anchor="middle">s</text></g>
+
+        <path class="edge" d="M130,40 H203"/>
+        <path class="edge" d="M315,34 H388"/>
+        <path class="edge" d="M390,48 H317"/>
+        <path class="edge" d="M228,60 L92,148"/>
+        <path class="edge" d="M112,150 L246,62"/>
+        <path class="edge" d="M260,150 V62"/>
+        <path class="edge" d="M205,164 H132"/>
+        <path class="edge" d="M130,178 H203"/>
+        <path class="edge" d="M315,170 H388"/>
+        <path class="edge" d="M410,150 L292,62"/>
+
+        <text class="q" x="168" y="212" text-anchor="middle">they disagree: who wins?</text>
+        <text class="q" x="445" y="212" text-anchor="middle">an agent signs off</text>
+
+        <rect class="mech" x="20" y="236" width="480" height="72" rx="8"/>
+        <text class="t2" x="34" y="260">Each role is one prompt</text>
+        <text class="s" x="34" y="279">purpose, rules and tools mixed together</text>
+        <text class="s" x="34" y="297">rewritten whenever the model changes</text>
+      </svg>
+    </div>
+
+    <div class="panel ours">
+      <h2>Vessel</h2>
+      <p>One responsibility, split into three layers that age at different speeds. Agents are parts of the mechanism.</p>
+      <svg viewBox="0 0 520 320" role="img" aria-label="A vessel as nested layers: purpose lasts decades, policy lasts years, mechanism lasts months; any number of agents work inside the mechanism as steps whose verdicts are findings">
+        <rect class="vessel-o" x="6" y="6" width="508" height="308" rx="14"/>
+        <text class="vessel-t" x="20" y="30">Purpose</text>
+        <text class="e" x="500" y="30" text-anchor="end">lasts decades</text>
+        <text class="s" x="20" y="50">why the vessel exists, e.g. keep software secure and working</text>
+
+        <rect class="gateway" x="22" y="64" width="476" height="234" rx="10"/>
+        <text class="gateway-t" x="36" y="88">Policy</text>
+        <text class="e" x="484" y="88" text-anchor="end">lasts years</text>
+        <text class="s" x="36" y="108">rules a unit must pass: gateway, findings, land</text>
+
+        <rect class="loop" x="38" y="122" width="444" height="160" rx="10"/>
+        <text class="loop-t" x="52" y="146">Mechanism</text>
+        <text class="e" x="468" y="146" text-anchor="end">lasts months</text>
+        <text class="s" x="52" y="166">what does the work today; swapped as tools improve</text>
+
+        <rect class="mech" x="56" y="186" width="100" height="40" rx="8"/>
+        <text class="t2" x="106" y="211" text-anchor="middle">Write</text>
+        <g class="kind s"><circle cx="138" cy="186" r="8.5"/><text x="138" y="190" text-anchor="middle">s</text></g><g class="kind d"><circle cx="156" cy="186" r="8.5"/><text x="156" y="190" text-anchor="middle">d</text></g>
+        <path class="edge" d="M156,198 H198"/>
+        <rect class="mech" x="200" y="186" width="100" height="40" rx="8"/>
+        <text class="t2" x="250" y="211" text-anchor="middle">Verify</text>
+        <g class="kind d"><circle cx="282" cy="186" r="8.5"/><text x="282" y="190" text-anchor="middle">d</text></g><g class="kind s"><circle cx="300" cy="186" r="8.5"/><text x="300" y="190" text-anchor="middle">s</text></g>
+        <path class="edge" d="M200,216 H158"/>
+        <text class="e" x="178" y="244" text-anchor="middle">findings</text>
+
+        <text class="t2" x="318" y="198">Any number of agents</text>
+        <text class="s" x="318" y="216">each one is a step</text>
+        <text class="s" x="318" y="234">its verdict is a finding</text>
+        <text class="s" x="52" y="268">a human decides at Land, not an agent</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="diff">
+    <section>
+      <h3>Starting point</h3>
+      <p class="was"><span class="who">Roles</span>A job title copied from a human team.</p>
+      <p class="now"><span class="who">Vessel</span>One responsibility, such as keeping software secure and up to date.</p>
+    </section>
+    <section>
+      <h3>More agents</h3>
+      <p class="was"><span class="who">Roles</span>Each new reviewer or critic adds a role, handoffs and another opinion.</p>
+      <p class="now"><span class="who">Vessel</span>Agents are steps in one loop. Add as many as help; the vessel still owns the outcome.</p>
+    </section>
+    <section>
+      <h3>Who decides</h3>
+      <p class="was"><span class="who">Roles</span>An agent approves another agent. Ties have no clear owner.</p>
+      <p class="now"><span class="who">Vessel</span><span class="k d">d</span> gives facts, <span class="k s">s</span> suggestions, <span class="k h">h</span> decisions.</p>
+    </section>
+    <section>
+      <h3>When tools change</h3>
+      <p class="was"><span class="who">Roles</span>Rewrite every persona prompt.</p>
+      <p class="now"><span class="who">Vessel</span>Swap the mechanism. Purpose and policy stay.</p>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span><span class="k d">d</span> deterministic &nbsp; <span class="k s">s</span> stochastic &nbsp; <span class="k h">h</span> human</span>
+    <span>See also: <a href="comparison.html">comparison.html</a> · <a href="overview.html">overview.html</a> · <a href="blueprint.html">blueprint.html</a></span>
+  </div>
+</div>
+</body>
+</html>

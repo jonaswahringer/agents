@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Factory vs delta-flume</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --c-bg: var(--background, #f7f7f9);
+    --c-fg: var(--foreground, #1c1c21);
+    --c-muted: var(--muted-foreground, #6e6e78);
+    --c-card: var(--card, #ffffff);
+    --c-border: var(--border, #dcdce2);
+    --c-soft: var(--secondary, #eeeef2);
+    --c-purpose: var(--info, #2f6fde);
+    --c-policy: var(--warning, #d9822b);
+    --c-radius: var(--radius, 8px);
+    --c-d: var(--success, #1f9d55);
+    --c-s: var(--chart-4, #8b5cf6);
+    --c-h: var(--destructive, #d64545);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-bg: var(--background, #101014);
+      --c-fg: var(--foreground, #ececf1);
+      --c-muted: var(--muted-foreground, #9a9aa6);
+      --c-card: var(--card, #17171c);
+      --c-border: var(--border, #2e2e36);
+      --c-soft: var(--secondary, #24242c);
+    }
+  }
+  :root[data-theme="dark"] {
+    --c-bg: var(--background, #101014);
+    --c-fg: var(--foreground, #ececf1);
+    --c-muted: var(--muted-foreground, #9a9aa6);
+    --c-card: var(--card, #17171c);
+    --c-border: var(--border, #2e2e36);
+    --c-soft: var(--secondary, #24242c);
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
+  .slide { max-width: 1100px; margin: 0 auto; padding: 4px 0; display: flex; flex-direction: column; gap: 18px; }
+  h1 { font-size: 26px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
+  .sub { color: var(--c-muted); font-size: 14px; margin: 4px 0 0; }
+  a { color: var(--c-purpose); }
+
+  .panel { border: 1px solid var(--c-border); border-radius: calc(var(--c-radius) + 4px); background: var(--c-card); padding: 14px 16px 10px; }
+  .panel.ours { border: 2px solid var(--c-purpose); }
+  .panel h2 { font-size: 13px; margin: 0 0 4px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--c-muted); }
+  .panel.ours h2 { color: var(--c-purpose); }
+  .panel p { font-size: 14px; margin: 0 0 8px; }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans, system-ui, sans-serif); fill: var(--c-fg); }
+  .t { font-size: 15px; font-weight: 650; }
+  .s { font-size: 12.5px; fill: var(--c-muted) !important; }
+  .e { font-size: 12.5px; font-weight: 600; fill: var(--c-muted) !important; }
+
+  .outside { fill: var(--c-card); stroke: var(--c-fg); stroke-width: 1.3; }
+  .line { fill: var(--c-soft); fill-opacity: .5; stroke: var(--c-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .policy { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; }
+  .vessel { fill: var(--c-card); stroke: var(--c-purpose); stroke-width: 2.2; }
+  .gw { fill: var(--c-policy); fill-opacity: .3; stroke: none; }
+  .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+  .bus { stroke: var(--c-muted); stroke-width: 2.5; fill: none; }
+  .t2 { font-size: 13.5px; font-weight: 650; }
+  .vessel-o { fill: none; stroke: var(--c-purpose); stroke-width: 2.2; }
+  .vessel-t { fill: var(--c-purpose) !important; font-size: 14px; font-weight: 700; }
+  .gateway { fill: var(--c-policy); fill-opacity: .1; stroke: var(--c-policy); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .gateway-t { fill: var(--c-policy) !important; font-size: 13px; font-weight: 700; }
+  .loop { fill: var(--c-soft); fill-opacity: .5; stroke: var(--c-muted); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .loop-t { font-size: 13px; font-weight: 700; }
+  .inner { border-top: 1px solid var(--c-border); margin-top: 10px; padding-top: 10px; }
+  .inner h2 { color: var(--c-muted) !important; }
+
+  .kind text { font-size: 11px; font-weight: 800; fill: #fff !important; }
+  .kind.d circle { fill: var(--c-d); } .kind.s circle { fill: var(--c-s); } .kind.h circle { fill: var(--c-h); }
+  .k { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 800; vertical-align: -3px; }
+  .k.d { background: var(--c-d); } .k.s { background: var(--c-s); } .k.h { background: var(--c-h); }
+
+  .diff { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .diff section { border: 1px solid var(--c-border); border-radius: var(--c-radius); background: var(--c-card); padding: 10px 12px; font-size: 13px; line-height: 1.4; }
+  .diff h3 { font-size: 12px; margin: 0 0 6px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--c-muted); }
+  .diff .was { color: var(--c-muted); margin: 0 0 6px; }
+  .diff .who { display: block; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+  .diff .now .who { color: var(--c-purpose); }
+  .diff .now { margin: 0; padding-left: 8px; border-left: 3px solid var(--c-purpose); }
+  .foot { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; color: var(--c-muted); font-size: 12.5px; }
+  @media (max-width: 760px) { .diff { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px) { .diff { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="slide">
+  <div>
+    <h1>One assembly line vs. many vessels</h1>
+    <p class="sub">A typical software factory pushes every unit down one line. delta-flume gives each responsibility its own vessel and keeps a human at the doors.</p>
+  </div>
+
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
+      </marker>
+    </defs>
+  </svg>
+
+  <div class="panel">
+    <h2>Typical software factory</h2>
+    <p>A spec goes in, role agents hand it down the line, and it ships when the checks pass.</p>
+    <svg viewBox="0 0 1000 136" role="img" aria-label="Spec flows through plan, code, test and review agents on one line, then ships on green to deploy">
+      <rect class="outside" x="10" y="38" width="110" height="50" rx="8"/>
+      <text class="t" x="65" y="68" text-anchor="middle">Spec</text>
+      <g class="kind h"><circle cx="120" cy="38" r="8.5"/><text x="120" y="42" text-anchor="middle">h</text></g>
+      <text class="s" x="65" y="108" text-anchor="middle">a human writes it</text>
+
+      <rect class="line" x="145" y="18" width="640" height="104" rx="12"/>
+      <text class="e" x="160" y="112">ONE LINE, EVERY UNIT</text>
+      <path class="edge" d="M120,63 H158"/>
+
+      <rect class="mech" x="160" y="38" width="128" height="50" rx="8"/>
+      <text class="t" x="224" y="68" text-anchor="middle">Plan</text>
+      <g class="kind s"><circle cx="288" cy="38" r="8.5"/><text x="288" y="42" text-anchor="middle">s</text></g>
+      <path class="edge" d="M288,63 H313"/>
+
+      <rect class="mech" x="315" y="38" width="128" height="50" rx="8"/>
+      <text class="t" x="379" y="68" text-anchor="middle">Code</text>
+      <g class="kind s"><circle cx="443" cy="38" r="8.5"/><text x="443" y="42" text-anchor="middle">s</text></g>
+      <path class="edge" d="M443,63 H468"/>
+
+      <rect class="mech" x="470" y="38" width="128" height="50" rx="8"/>
+      <text class="t" x="534" y="68" text-anchor="middle">Test</text>
+      <g class="kind s"><circle cx="580" cy="38" r="8.5"/><text x="580" y="42" text-anchor="middle">s</text></g><g class="kind d"><circle cx="598" cy="38" r="8.5"/><text x="598" y="42" text-anchor="middle">d</text></g>
+      <path class="edge" d="M598,63 H623"/>
+
+      <rect class="mech" x="625" y="38" width="128" height="50" rx="8"/>
+      <text class="t" x="689" y="68" text-anchor="middle">Review</text>
+      <g class="kind s"><circle cx="753" cy="38" r="8.5"/><text x="753" y="42" text-anchor="middle">s</text></g>
+      <path class="edge" d="M753,63 H796"/>
+
+      <path class="policy" d="M845,20 L892,63 L845,106 L798,63 Z"/>
+      <text class="t" x="845" y="61" text-anchor="middle">Ship</text>
+      <text class="s" x="845" y="76" text-anchor="middle">on green</text>
+      <g class="kind s"><circle cx="866" cy="30" r="8.5"/><text x="866" y="34" text-anchor="middle">s</text></g><g class="kind d"><circle cx="884" cy="42" r="8.5"/><text x="884" y="46" text-anchor="middle">d</text></g>
+      <text class="s" x="845" y="128" text-anchor="middle">agents approve agents</text>
+
+      <path class="edge" d="M892,63 H903"/>
+      <rect class="outside" x="905" y="38" width="85" height="50" rx="8"/>
+      <text class="t" x="947" y="68" text-anchor="middle">Deploy</text>
+    </svg>
+  </div>
+
+  <div class="panel ours">
+    <h2>delta-flume</h2>
+    <p>Each responsibility gets a vessel with the same blueprint: gateway, agent loop, land. A human routes loose work in and decides what lands.</p>
+    <svg viewBox="0 0 1000 250" role="img" aria-label="Typed triggers go straight to vessels; loose triggers pass triage and a human route; vessels pass a human land decision before output">
+      <rect class="outside" x="10" y="20" width="160" height="62" rx="8"/>
+      <text class="t" x="22" y="44">Typed trigger</text>
+      <text class="s" x="22" y="66">schedule, PR, CI, a go</text>
+
+      <rect class="outside" x="10" y="160" width="160" height="62" rx="8"/>
+      <text class="t" x="22" y="184">Loose trigger</text>
+      <text class="s" x="22" y="206">email, bug report, idea</text>
+
+      <path class="edge" d="M170,191 H203"/>
+      <rect class="mech" x="205" y="168" width="110" height="46" rx="8"/>
+      <text class="t" x="260" y="196" text-anchor="middle">Triage</text>
+      <g class="kind s"><circle cx="297" cy="168" r="8.5"/><text x="297" y="172" text-anchor="middle">s</text></g><g class="kind h"><circle cx="315" cy="168" r="8.5"/><text x="315" y="172" text-anchor="middle">h</text></g>
+
+      <path class="edge" d="M315,191 H340"/>
+      <path class="policy" d="M376,161 L412,191 L376,221 L340,191 Z"/>
+      <text class="t" x="376" y="196" text-anchor="middle">Route</text>
+      <g class="kind h"><circle cx="398" cy="165" r="8.5"/><text x="398" y="169" text-anchor="middle">h</text></g>
+      <path class="edge" d="M412,191 H438"/>
+      <text class="e" x="376" y="240" text-anchor="middle">now typed</text>
+
+      <path class="edge" d="M170,51 H438"/>
+      <line class="bus" x1="440" y1="26" x2="440" y2="226"/>
+
+      <path class="edge" d="M440,26 H463"/>
+      <rect class="vessel" x="465" y="6" width="290" height="40" rx="10"/>
+      <rect class="gw" x="466" y="7" width="16" height="38" rx="8"/>
+      <text class="t" x="494" y="31">Maintenance</text>
+      <text class="s" x="610" y="31">secure, up to date</text>
+
+      <path class="edge" d="M440,76 H463"/>
+      <rect class="vessel" x="465" y="56" width="290" height="40" rx="10"/>
+      <rect class="gw" x="466" y="57" width="16" height="38" rx="8"/>
+      <text class="t" x="494" y="81">Implement</text>
+      <text class="s" x="610" y="81">agreed change</text>
+
+      <path class="edge" d="M440,126 H463"/>
+      <rect class="vessel" x="465" y="106" width="290" height="40" rx="10"/>
+      <rect class="gw" x="466" y="107" width="16" height="38" rx="8"/>
+      <text class="t" x="494" y="131">Testing</text>
+      <text class="s" x="610" y="131">sharp, compact tests</text>
+
+      <path class="edge" d="M440,176 H463"/>
+      <rect class="vessel" x="465" y="156" width="290" height="40" rx="10"/>
+      <rect class="gw" x="466" y="157" width="16" height="38" rx="8"/>
+      <text class="t" x="494" y="181">Prototype</text>
+      <text class="s" x="610" y="181">try UI/UX ideas</text>
+
+      <path class="edge" d="M440,226 H463"/>
+      <rect class="vessel" x="465" y="206" width="290" height="40" rx="10"/>
+      <rect class="gw" x="466" y="207" width="16" height="38" rx="8"/>
+      <text class="t" x="494" y="231">Meta</text>
+      <text class="s" x="610" y="231">improve the process</text>
+
+      <line class="bus" x1="778" y1="26" x2="778" y2="226"/>
+      <path class="edge" d="M755,26 H776"/>
+      <path class="edge" d="M755,76 H776"/>
+      <path class="edge" d="M755,126 H776"/>
+      <path class="edge" d="M755,176 H776"/>
+      <path class="edge" d="M755,226 H776"/>
+
+      <path class="edge" d="M778,126 H796"/>
+      <path class="policy" d="M834,90 L870,126 L834,162 L798,126 Z"/>
+      <text class="t" x="834" y="131" text-anchor="middle">Land</text>
+      <g class="kind h"><circle cx="852" cy="94" r="8.5"/><text x="852" y="98" text-anchor="middle">h</text></g><g class="kind d"><circle cx="870" cy="104" r="8.5"/><text x="870" y="108" text-anchor="middle">d</text></g>
+      <text class="s" x="834" y="182" text-anchor="middle">a human decides</text>
+
+      <path class="edge" d="M870,126 H888"/>
+      <rect class="outside" x="890" y="101" width="100" height="50" rx="8"/>
+      <text class="t" x="940" y="131" text-anchor="middle">Output</text>
+      <text class="s" x="940" y="170" text-anchor="middle">PR, report, issue</text>
+    </svg>
+
+    <div class="inner">
+      <h2>Inside every vessel</h2>
+      <svg viewBox="0 0 1000 150" role="img" aria-label="Vessel blueprint: trigger passes the gateway (accept, start), the agent loop writes and verifies until no findings are left, then a human decides at land before output">
+        <rect class="outside" x="4" y="52" width="80" height="40" rx="8"/>
+        <text class="t2" x="44" y="77" text-anchor="middle">Trigger</text>
+        <path class="edge" d="M84,72 H144"/>
+
+        <rect class="vessel-o" x="100" y="4" width="780" height="142" rx="14"/>
+        <text class="vessel-t" x="112" y="24">Vessel</text>
+        <text class="s" x="870" y="24" text-anchor="end">Watcher: budget spent → dead letters, human notified</text>
+
+        <rect class="gateway" x="118" y="34" width="220" height="102" rx="10"/>
+        <text class="gateway-t" x="128" y="128">Gateway</text>
+        <path class="policy" d="M180,46 L214,72 L180,98 L146,72 Z"/>
+        <text class="t2" x="180" y="77" text-anchor="middle">Accept</text>
+        <g class="kind d"><circle cx="202" cy="50" r="8.5"/><text x="202" y="54" text-anchor="middle">d</text></g>
+        <path class="edge" d="M214,72 H240"/>
+        <path class="policy" d="M276,46 L310,72 L276,98 L242,72 Z"/>
+        <text class="t2" x="276" y="77" text-anchor="middle">Start</text>
+        <g class="kind d"><circle cx="298" cy="50" r="8.5"/><text x="298" y="54" text-anchor="middle">d</text></g>
+        <path class="edge" d="M310,72 H360"/>
+
+        <rect class="loop" x="350" y="34" width="335" height="102" rx="10"/>
+        <text class="loop-t" x="362" y="128">Agent loop</text>
+        <rect class="mech" x="362" y="52" width="86" height="40" rx="8"/>
+        <text class="t2" x="405" y="77" text-anchor="middle">Write</text>
+        <g class="kind s"><circle cx="430" cy="52" r="8.5"/><text x="430" y="56" text-anchor="middle">s</text></g><g class="kind d"><circle cx="448" cy="52" r="8.5"/><text x="448" y="56" text-anchor="middle">d</text></g>
+        <path class="edge" d="M448,72 H478"/>
+        <rect class="mech" x="480" y="52" width="86" height="40" rx="8"/>
+        <text class="t2" x="523" y="77" text-anchor="middle">Verify</text>
+        <g class="kind d"><circle cx="548" cy="52" r="8.5"/><text x="548" y="56" text-anchor="middle">d</text></g><g class="kind s"><circle cx="566" cy="52" r="8.5"/><text x="566" y="56" text-anchor="middle">s</text></g>
+        <path class="edge" d="M566,72 H586"/>
+        <path class="policy" d="M630,46 L674,72 L630,98 L586,72 Z"/>
+        <text class="t2" x="630" y="77" text-anchor="middle">Findings</text>
+        <path class="edge" d="M630,98 V112 H405 V94"/>
+        <text class="e" x="518" y="128" text-anchor="middle">findings: back to Write</text>
+
+        <path class="edge" d="M674,72 H720"/>
+        <text class="e" x="703" y="64" text-anchor="middle">none</text>
+        <path class="policy" d="M760,46 L798,72 L760,98 L722,72 Z"/>
+        <text class="t2" x="760" y="77" text-anchor="middle">Land</text>
+        <g class="kind h"><circle cx="780" cy="50" r="8.5"/><text x="780" y="54" text-anchor="middle">h</text></g><g class="kind d"><circle cx="798" cy="60" r="8.5"/><text x="798" y="64" text-anchor="middle">d</text></g>
+        <text class="s" x="760" y="122" text-anchor="middle">a human decides</text>
+
+        <path class="edge" d="M798,72 H898"/>
+        <rect class="outside" x="900" y="52" width="95" height="40" rx="8"/>
+        <text class="t2" x="947" y="77" text-anchor="middle">Output</text>
+      </svg>
+    </div>
+  </div>
+
+  <div class="diff">
+    <section>
+      <h3>Shape</h3>
+      <p class="was"><span class="who">Factory</span>One line. Every unit passes every station.</p>
+      <p class="now"><span class="who">delta-flume</span>One vessel per responsibility, all on the same blueprint.</p>
+    </section>
+    <section>
+      <h3>Way in</h3>
+      <p class="was"><span class="who">Factory</span>A spec or a ticket.</p>
+      <p class="now"><span class="who">delta-flume</span>Typed triggers go straight to their vessel. Loose ones pass shared triage and a human route.</p>
+    </section>
+    <section>
+      <h3>Who decides</h3>
+      <p class="was"><span class="who">Factory</span>Agents approve agents. Green checks ship.</p>
+      <p class="now"><span class="who">delta-flume</span>An agent's verdict is a suggestion. A human lands by default.</p>
+    </section>
+    <section>
+      <h3>What lasts</h3>
+      <p class="was"><span class="who">Factory</span>The line is built around today's tools.</p>
+      <p class="now"><span class="who">delta-flume</span>Purpose and policy stay. Agents and tools get swapped as they improve.</p>
+    </section>
+  </div>
+
+  <div class="foot">
+    <span><span class="k d">d</span> deterministic &nbsp; <span class="k s">s</span> stochastic &nbsp; <span class="k h">h</span> human</span>
+    <span>Details: <a href="overview.html">overview.html</a> · <a href="blueprint.html">blueprint.html</a></span>
+  </div>
+</div>
+</body>
+</html>

@@ -51,6 +51,8 @@
   .policy { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; }
   .policy-dash { fill: var(--c-card); stroke: var(--c-policy); stroke-width: 2; stroke-dasharray: 5 4; }
   .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .queue { fill: var(--c-card); stroke: var(--c-muted); stroke-width: 1.3; }
+  .slots { stroke: var(--c-muted); stroke-width: 2; }
   .exit { fill: var(--c-card); stroke: var(--c-muted); stroke-width: 1.3; stroke-dasharray: 5 4; }
   .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
   .dash { stroke-dasharray: 5 4; }
@@ -75,6 +77,7 @@
   .sw.loop { background: color-mix(in srgb, var(--c-soft) 50%, transparent); border: 1.5px dashed var(--c-muted); border-radius: 4px; }
   .sw.policy { width: 13px; height: 13px; border: 2px solid var(--c-policy); transform: rotate(45deg); margin: 2px 0 0 6px; }
   .sw.mech { background: var(--c-soft); border: 1.3px solid var(--c-muted); border-radius: 4px; }
+  .sw.queue { border: 1.3px solid var(--c-muted); border-radius: 4px; background: linear-gradient(90deg, transparent 0 12px, var(--c-muted) 12px 13.5px, transparent 13.5px 16px, var(--c-muted) 16px 17.5px, transparent 17.5px 20px, var(--c-muted) 20px 21.5px, transparent 21.5px); }
   .sw.exit { border: 1.3px dashed var(--c-muted); border-radius: 4px; }
   @media (max-width: 640px) { .legend { grid-template-columns: 1fr; } .steps .row { grid-template-columns: 1fr; gap: 2px; } }
 </style>
@@ -118,8 +121,13 @@
     <path class="policy" d="M335,132 L373,170 L335,208 L297,170 Z"/>
     <text class="t" x="335" y="175" text-anchor="middle">Start</text>
     <g class="kind d"><circle cx="358" cy="138" r="8.5"/><text x="358" y="142" text-anchor="middle">d</text></g>
-    <path class="edge" d="M335,208 V246 H362 V193"/>
-    <text class="e" x="300" y="266">not now: wait</text>
+    <path class="edge" d="M335,208 V253"/>
+    <text class="e" x="341" y="236">not now</text>
+    <rect class="queue" x="295" y="255" width="80" height="36" rx="6"/>
+    <path class="slots" d="M352,262 V284 M359,262 V284 M366,262 V284"/>
+    <text class="t" x="322" y="278" text-anchor="middle">Queue</text>
+    <g class="kind d"><circle cx="375" cy="255" r="8.5"/><text x="375" y="259" text-anchor="middle">d</text></g>
+    <path class="edge" d="M295,273 H282 V189 H313"/>
 
     <!-- agent loop: a circle of write -> verify -> findings -> write -->
     <rect class="loop" x="410" y="95" width="325" height="260" rx="10"/>
@@ -184,6 +192,7 @@
       <h2>Inside the shapes</h2>
       <div class="row"><span class="sw policy"></span><span><b>Decision</b>: policy. A unit moves on only if it passes.</span></div>
       <div class="row"><span class="sw mech"></span><span><b>Step</b>: work done by agents, tools or people.</span></div>
+      <div class="row"><span class="sw queue"></span><span><b>Queue</b>: units wait here.</span></div>
       <div class="row"><span class="sw exit"></span><span><b>Exit</b>: a unit leaves without landing.</span></div>
       <div class="row"><span></span><span><b>Kind of part</b>: <span class="k d">d</span> deterministic, <span class="k s">s</span> stochastic, <span class="k h">h</span> human.</span></div>
     </section>
@@ -191,7 +200,7 @@
       <h2>Steps</h2>
       <div class="row"><b>Trigger</b><span>Typed, or loose and routed by a human through triage.</span></div>
       <div class="row"><b>Accept</b><span>Judges the unit. Declines a duplicate without new input, a superseded unit, or incomplete input, and asks for what's missing. Declined units are logged.</span></div>
-      <div class="row"><b>Start</b><span>Judges the vessel. While it's overloaded or paused, the unit waits.</span></div>
+      <div class="row"><b>Start</b><span>Judges the vessel. While it's overloaded or paused, the unit waits in the queue. Each vessel picks the order.</span></div>
       <div class="row"><b>Write</b><span>Agents and tools, such as agent CLIs and the runtime, make a change.</span></div>
       <div class="row"><b>Verify</b><span>Checks the change, cheapest first (after poteto's pyramid; a well-designed codebase makes every check cheaper):
         <ul class="ladder">
