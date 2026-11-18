@@ -14,6 +14,10 @@
 
 <!-- Which typed triggers does it accept? Loose ones only reach it after triage and a human route. -->
 
+### Weight
+
+<!-- How does a unit get its weight (low, normal, high, critical), and who or what sets it? -->
+
 ### Gateway
 
 <!-- Accept: when does it decline a unit (duplicate without new input, superseded, incomplete)? Start: when does a unit wait (overloaded, paused)? Estimate: see Retry budget. -->
