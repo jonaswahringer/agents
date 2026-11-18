@@ -14,6 +14,9 @@ the agent configuration, selected skills, and local commands.
 | [workflows](tools/workflows/README.md) | Runs recurring jobs, including the T3 update digest and ready Furnace tasks. | `python3 tools/workflows/workflows.py` |
 | [auto-resume](tools/auto-resume/README.md) | Continues an explicitly armed session after subscription quota returns. | `tools/auto-resume/auto-resume` |
 
+[frameworks/](frameworks/README.md) holds frameworks for organizing agent work, such as
+delta-flume.
+
 The installer links `agents`, `usage`, and `furnace` into `~/.local/bin/` on each
 machine. If the `usage` name is taken, it uses `aiusage`. Agent skills are selected
 separately. The services need their own setup; their documentation covers credentials,
