@@ -93,8 +93,28 @@ Discovery of new work stays human: a backlog plus a digest that alerts on strong
 
 To add a vessel, copy [template.md](template.md).
 
+## In a project
+
+A project that runs vessels keeps the what apart from the how.
+
+```
+<project>/
+  AGENTS.md            how, shared by every vessel
+  vessels/
+    maintenance.md     what, for one vessel in this project
+    testing.md
+```
+
+| File | Holds | Layer |
+|---|---|---|
+| `vessels/<name>.md` | the vessel type, active or paused, what it does here, its scope, and any policy overrides. Copy [instance.md](instance.md). | purpose, policy |
+| `AGENTS.md` | the commands to build and test, the runtime check, and the env vars and secrets a vessel needs: their names and where each comes from, never the values | mechanism |
+
+The agent loop gets the type file, the instance file and the project's AGENTS.md. Agents load AGENTS.md on their own, so the how has one home.
+
 ## Open
 
 - When a unit is done.
+- How a project reaches the type files: a link, a copy, or the installer.
 - The ceiling multiple, and how size is estimated per vessel.
 - Queue order: first come first served, by weight, or something else. Each vessel decides for now.
