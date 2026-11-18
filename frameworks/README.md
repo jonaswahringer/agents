@@ -4,6 +4,7 @@ A framework for agent work that stays the same while tools change. A **delta** f
 
 - [overview.html](overview.html): the big picture, with many triggers and several vessels.
 - [blueprint.html](blueprint.html): the inside of one vessel.
+- [comparison.html](comparison.html): a one-slide comparison with a typical software factory.
 
 ## Layers
 
