@@ -6,17 +6,17 @@ Result: `<project>/vessels/<name>.md`, and an AGENTS.md that holds everything th
 
 ## Before you start
 
-You need the project's path and the vessel type, `frameworks/<name>/vessel.md`.
+You need the project's path and the vessel type: `vessels/<name>.md` in this framework, not in the project.
 
 Stop if:
 
-- the type file doesn't exist. Create the type first from [template.md](template.md).
+- the type file doesn't exist. Create the type first from [templates/vessel.md](templates/vessel.md).
 - `<project>/vessels/<name>.md` already exists. Ask whether to update it instead.
 
 ## 1. Read
 
 1. The type file. Its Policy and Mechanism say what the vessel needs from a project.
-2. [instance.md](instance.md).
+2. [templates/instance.md](templates/instance.md).
 3. The project's AGENTS.md, and every file that copies or links it, such as CLAUDE.md.
 4. Whatever confirms AGENTS.md: the package manifest, Makefile, CI config.
 
@@ -74,7 +74,7 @@ Done when every instance section and every finding has an answer.
 
 ## 4. Write
 
-1. Copy [instance.md](instance.md) to `<project>/vessels/<name>.md`, fill it from the answers, and remove the comments.
+1. Copy [templates/instance.md](templates/instance.md) to `<project>/vessels/<name>.md`, fill it from the answers, and remove the comments.
 2. Apply the approved AGENTS.md changes and nothing else. Keep the file's existing structure and voice.
 
 ## 5. Check
