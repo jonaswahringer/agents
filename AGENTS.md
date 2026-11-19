@@ -26,3 +26,18 @@ This repository installs shared agent instructions and skills.
 ## Documentation
 
 Write in plain words. Lead with the result, and report failed or skipped checks.
+
+## Pull requests
+
+- Use `.github/PULL_REQUEST_TEMPLATE.md`. Keep the visible summary short, with
+  a before/after table and one main review decision. Link detailed evidence.
+- Name branches `<type>/<topic>-<change>`, using lowercase words separated by
+  hyphens. Use `skills/` for skill changes, `docs/` for documentation, `fix/`
+  for fixes, and `feat/` for new behavior.
+- Scheduled model refreshes use
+  `skills/work-smart-not-hard-refresh-YYYY-MM-DD`, with the local run date.
+- Check for an existing open PR for the same skill before creating another.
+  Review it first and continue on its branch when appropriate.
+- A merged model-skill update is installed on the Mac mini by the next weekly
+  maintenance run. Follow `docs/model-skill-maintenance.md` and verify the
+  installed skill against `main` before reporting it as updated.
