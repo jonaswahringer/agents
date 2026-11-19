@@ -94,7 +94,7 @@ Three measures, kept apart: how much a unit matters, how much work it is, and wh
 
 Discovery of new work stays human: a backlog plus a digest that alerts on strong demand or high-reward opportunities.
 
-To add a vessel type, copy [templates/vessel.md](templates/vessel.md) to `vessels/<name>.md`.
+To add a vessel type, follow [new-vessel/](new-vessel/).
 
 ## In a project
 
@@ -115,7 +115,7 @@ A project that runs vessels keeps the what apart from the how.
 
 The instance's `vessel` field names a type in [vessels/](vessels/). The agent loop gets the type file, the instance file and the project's AGENTS.md. Agents load AGENTS.md on their own, so the how has one home.
 
-To set up a vessel in a project, follow [new-instance.md](new-instance.md).
+To set up a vessel in a project, follow [new-instance/](new-instance/).
 
 ## Files
 
@@ -126,9 +126,8 @@ To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 | [diagrams/why-vessels.html](diagrams/why-vessels.html) | One slide on why vessels beat role-based agents. |
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [vessels/](vessels/) | Vessel types, one file each. |
-| [templates/vessel.md](templates/vessel.md) | Template for a new vessel type. |
-| [new-instance.md](new-instance.md) | Steps to set up a vessel in a project. |
-| [templates/instance.md](templates/instance.md) | Template for a vessel in a project. new-instance.md fills it. |
+| [new-vessel/](new-vessel/) | Add a vessel type: the steps, and the template they fill. |
+| [new-instance/](new-instance/) | Set up a vessel in a project: the steps, and the template they fill. |
 | [LICENSE](LICENSE) | MIT. |
 
 ## Open
