@@ -98,26 +98,37 @@ Three measures, kept apart: how much a unit matters, how much work it is, and wh
 
 Discovery of new work stays human: a backlog plus a digest that alerts on strong demand or high-reward opportunities.
 
-To add a vessel type, copy [templates/vessel.md](templates/vessel.md) to `vessels/<name>.md`.
+To add a vessel type, copy [templates/vessel.md](templates/vessel.md) to `vessels/<type>.md`.
 
 ## In a project
 
-A project that runs vessels keeps the what apart from the how.
+A project runs one or more **instances** of a vessel type. Each instance covers one part of the project, with its own scope, schedule and pause switch. Split a type into instances when one of those differs, or when a part needs its own how. A new subject alone, such as another dependency, stays in the same instance.
+
+The project keeps the what apart from the how.
 
 ```
 <project>/
-  AGENTS.md            how, shared by every vessel
+  AGENTS.md                how, for every agent in the project
   vessels/
-    maintenance.md     what, for one vessel in this project
-    testing.md
+    README.md              how, only for vessels
+    maintenance/
+      dependencies.md      what, for one instance
+      docs.md
+    testing/
+      snapshot-tests.md
 ```
 
 | File | Holds | Layer |
 |---|---|---|
-| `vessels/<name>.md` | the vessel type, active or paused, what it does here, its scope, and any policy overrides | purpose, policy |
-| `AGENTS.md` | the commands to build and test, the runtime check, and the env vars and secrets a vessel needs: their names and where each comes from, never the values | mechanism |
+| `vessels/<type>/<instance>.md` | the vessel type, active or paused, what the instance does here, its scope, and any policy overrides | purpose, policy |
+| `vessels/README.md` | the project's instances, and the how that only vessels need: an instance's commands and procedures, and the env vars and secrets: their names and where each comes from, never the values | mechanism |
+| `AGENTS.md` | the how that every agent in the project needs: the commands to build and test, the runtime check, and off-limits files | mechanism |
 
-The instance's `vessel` field names a type in [vessels/](vessels/). The agent loop gets the type file, the instance file and the project's AGENTS.md. Agents load AGENTS.md on their own, so the how has one home.
+If any agent working in the project needs it, it goes in AGENTS.md. If only a vessel needs it, it goes in `vessels/README.md`. Neither repeats the other, so AGENTS.md stays small.
+
+Name an instance after what it keeps, such as `dependencies` or `docs`, not after an action; the type already says what is done. The name goes into each unit's key. Instances of one type never share a file, so two instances never claim the same unit.
+
+The instance's `vessel` field names a type in [vessels/](vessels/) and matches its folder. The agent loop gets the type file, the instance file, the project's `vessels/README.md` and its AGENTS.md. Agents load AGENTS.md on their own; the mechanism hands over the rest.
 
 To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 
@@ -131,8 +142,9 @@ To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [vessels/](vessels/) | Vessel types, one file each. |
 | [templates/vessel.md](templates/vessel.md) | Template for a new vessel type. |
-| [new-instance.md](new-instance.md) | Steps to set up a vessel in a project. |
-| [templates/instance.md](templates/instance.md) | Template for a vessel in a project. new-instance.md fills it. |
+| [new-instance.md](new-instance.md) | Steps to set up a vessel instance in a project. |
+| [templates/instance.md](templates/instance.md) | Template for one vessel instance in a project. new-instance.md fills it. |
+| [templates/vessels-readme.md](templates/vessels-readme.md) | Template for a project's `vessels/README.md`. |
 | [LICENSE](LICENSE) | MIT. |
 
 ## Open
