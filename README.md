@@ -8,9 +8,9 @@ the machine profile, selected skills and local commands.
 | [Setup](setup/README.md) | Install and configure shared instructions and commands. |
 | [CLI](tools/agents-cli/README.md) | Update, select skills, inspect links and sync upstream copies. |
 | [Skills](skills/) | Reusable instructions, grouped by author. |
-| [Furnace](tools/furnace/README.md) | A private backlog with claims, checkpoints and review reports. |
-| [Comms](tools/comms/README.md) | Publish reports and media to reachable tailnet URLs. |
 | [Frameworks](frameworks/README.md) | Organize agent work with delta-flume. |
+| [Comms](tools/comms/README.md) | Publish reports and media to reachable tailnet URLs. |
+| [Furnace](tools/furnace/README.md) | A private backlog with claims, checkpoints and review reports. |
 | [usage](tools/usage/README.md) | Deprecated quota CLI, retained for existing users. |
 
 ## Start
