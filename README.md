@@ -6,7 +6,7 @@ the machine profile, selected skills and local commands.
 | Area | Purpose |
 | --- | --- |
 | [Setup](setup/README.md) | Install and configure shared instructions and commands. |
-| [agents CLI](tools/agents-cli/README.md) | Update, select skills, inspect links and sync upstream copies. |
+| [CLI](tools/agents-cli/README.md) | Update, select skills, inspect links and sync upstream copies. |
 | [Skills](skills/) | Reusable instructions, grouped by author. |
 | [Furnace](tools/furnace/README.md) | A private backlog with claims, checkpoints and review reports. |
 | [Comms](tools/comms/README.md) | Publish reports and media to reachable tailnet URLs. |
