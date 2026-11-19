@@ -3,15 +3,14 @@
 Shared instructions, skills and tools for coding agents. One installer manages
 the machine profile, selected skills and local commands.
 
-| Area | Purpose |
-| --- | --- |
-| [Setup](setup/README.md) | Install and configure shared instructions and commands. |
-| [CLI](tools/agents-cli/README.md) | Update, select skills, inspect links and sync upstream copies. |
-| [Skills](skills/) | Reusable instructions, grouped by author. |
-| [Frameworks](frameworks/README.md) | Organize agent work with delta-flume. |
-| [Comms](tools/comms/README.md) | Publish reports and media to reachable tailnet URLs. |
-| [Furnace](tools/furnace/README.md) | A private backlog with claims, checkpoints and review reports. |
-| [usage](tools/usage/README.md) | Deprecated quota CLI, retained for existing users. |
+- [`setup/`](setup/README.md): install and configure shared instructions and commands.
+- [`tools/`](tools/): local commands.
+  - [`agents-cli/`](tools/agents-cli/README.md): update, select skills, inspect links and sync upstream copies.
+  - [`comms/`](tools/comms/README.md): publish reports and media to reachable tailnet URLs.
+  - [`furnace/`](tools/furnace/README.md): a private backlog with claims, checkpoints and review reports.
+  - [`usage/`](tools/usage/README.md): deprecated quota CLI, retained for existing users.
+- [`frameworks/`](frameworks/README.md): organize agent work with delta-flume.
+- [`skills/`](skills/): reusable instructions, grouped by author.
 
 ## Start
 
