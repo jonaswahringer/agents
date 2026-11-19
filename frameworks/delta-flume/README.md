@@ -130,7 +130,7 @@ Name an instance after what it keeps, such as `dependencies` or `docs`, not afte
 
 The instance's `vessel` field names a type in [vessels/](vessels/) and matches its folder. The agent loop gets the type file, the instance file, the project's `vessels/README.md` and its AGENTS.md. Agents load AGENTS.md on their own; the mechanism hands over the rest.
 
-To set up a vessel in a project, follow [new-instance.md](new-instance.md).
+To set up vessels in a project, follow [setup.md](setup.md). An agent surveys the project, proposes instances on an HTML page, and asks the human in two rounds before it writes anything.
 
 ## Files
 
@@ -142,8 +142,8 @@ To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [vessels/](vessels/) | Vessel types, one file each. |
 | [templates/vessel.md](templates/vessel.md) | Template for a new vessel type. |
-| [new-instance.md](new-instance.md) | Steps to set up a vessel instance in a project. |
-| [templates/instance.md](templates/instance.md) | Template for one vessel instance in a project. new-instance.md fills it. |
+| [setup.md](setup.md) | Steps to set up vessels in a project, new or existing. |
+| [templates/instance.md](templates/instance.md) | Template for one vessel instance in a project. setup.md fills it. |
 | [templates/vessels-readme.md](templates/vessels-readme.md) | Template for a project's `vessels/README.md`. |
 | [LICENSE](LICENSE) | MIT. |
 
