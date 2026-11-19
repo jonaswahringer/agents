@@ -126,7 +126,7 @@ The project keeps the what apart from the how.
 
 If any agent working in the project needs it, it goes in AGENTS.md. If only a vessel needs it, it goes in `vessels/README.md`. Neither repeats the other, so AGENTS.md stays small.
 
-Name an instance after what it keeps, such as `dependencies` or `docs`, not after an action; the type already says what is done. The name goes into each unit's key. Instances of one type never share a file, so two instances never claim the same unit.
+Name an instance after what it keeps, such as `dependencies` or `docs`, not after an action; the type already says what is done. The name goes into each unit's key. Instances of one type never claim the same subject, so every unit has one owner. They may share a file when each keeps a different part of it, such as the version lines in a README and the rest of its text.
 
 The instance's `vessel` field names a type in [vessels/](vessels/) and matches its folder. The agent loop gets the type file, the instance file, the project's `vessels/README.md` and its AGENTS.md. Agents load AGENTS.md on their own; the mechanism hands over the rest.
 

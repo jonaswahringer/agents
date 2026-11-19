@@ -84,7 +84,7 @@ Done when every instance section and every finding has an answer.
 ## 5. Check
 
 - `vessel` names an existing type and matches the instance's folder, and `status` is `active` or `paused`.
-- The scope shares no file with another instance of the same type.
+- The scope claims no subject that another instance of the same type covers.
 - `vessels/README.md` lists the instance with its trigger and where it runs, and no placeholder is left.
 - Every command, script and path in AGENTS.md and `vessels/README.md` exists.
 - Neither file holds a secret value.
