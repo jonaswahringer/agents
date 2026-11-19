@@ -73,7 +73,7 @@ The markdown guides the agent loop. Everything else is enforced outside the agen
 
 | Part | Enforced by | Kind |
 |---|---|---|
-| Trigger | a scheduled job per instance (cron or a GitHub Action) | d |
+| Trigger | a scheduled job per instance (cron or a GitHub Action), listed in the project's `vessels/README.md` | d |
 | Weight | a script, when the finding is made | d |
 | Accept | a script: `gh pr list` searches for the key, open or closed | d |
 | Start | a script: is the instance paused (`status` in the project's `vessels/maintenance/<instance>.md`) or overloaded? If so, the finding waits in the queue | d |

@@ -121,7 +121,7 @@ The project keeps the what apart from the how.
 | File | Holds | Layer |
 |---|---|---|
 | `vessels/<type>/<instance>.md` | the vessel type, active or paused, what the instance does here, its scope, and any policy overrides | purpose, policy |
-| `vessels/README.md` | the project's instances, and the how that only vessels need: an instance's commands and procedures, and the env vars and secrets: their names and where each comes from, never the values | mechanism |
+| `vessels/README.md` | the project's instances with each one's trigger and where it runs, and the how that only vessels need: an instance's commands and procedures, and the env vars and secrets: their names and where each comes from, never the values | mechanism |
 | `AGENTS.md` | the how that every agent in the project needs: the commands to build and test, the runtime check, and off-limits files | mechanism |
 
 If any agent working in the project needs it, it goes in AGENTS.md. If only a vessel needs it, it goes in `vessels/README.md`. Neither repeats the other, so AGENTS.md stays small.

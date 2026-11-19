@@ -78,14 +78,14 @@ Done when every instance section and every finding has an answer.
 ## 4. Write
 
 1. Copy [templates/instance.md](templates/instance.md) to `<project>/vessels/<type>/<instance>.md`, fill it from the answers, and remove the comments.
-2. If `<project>/vessels/README.md` doesn't exist, copy [templates/vessels-readme.md](templates/vessels-readme.md) there and remove the comments. List the new instance under Instances.
+2. If `<project>/vessels/README.md` doesn't exist, copy [templates/vessels-readme.md](templates/vessels-readme.md) there, replace its placeholders and remove the comments. Add the new instance to Instances, with its trigger and where it runs.
 3. Apply the approved changes to AGENTS.md and `vessels/README.md` and nothing else. Keep each file's existing structure and voice.
 
 ## 5. Check
 
 - `vessel` names an existing type and matches the instance's folder, and `status` is `active` or `paused`.
 - The scope shares no file with another instance of the same type.
-- `vessels/README.md` lists the instance.
+- `vessels/README.md` lists the instance with its trigger and where it runs, and no placeholder is left.
 - Every command, script and path in AGENTS.md and `vessels/README.md` exists.
 - Neither file holds a secret value.
 - Each override changes policy that exists in the type file.
