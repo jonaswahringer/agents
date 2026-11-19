@@ -1,6 +1,10 @@
 # delta-flume (v0)
 
+**Standalone repo:** https://github.com/jonaswahringer/delta-flume
+
 A framework for agent work that stays the same while tools change. A **delta** fans one stream of triggers out to many vessels; a **flume** carries each unit to where the work happens. Each responsibility gets a **vessel**: a fixed shape that today's agents and tools fill.
+
+
 
 ## Big picture
 
