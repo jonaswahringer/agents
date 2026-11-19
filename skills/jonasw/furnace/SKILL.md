@@ -17,9 +17,8 @@ and quote every path. Use the state root supplied by the current workflow or use
 otherwise use `$XDG_STATE_HOME/agents/furnace`, or `~/.local/state/agents/furnace`.
 Records stay outside source repositories and survive skill updates.
 
-Read [operations.md](operations.md) for commands and service integration. Use the
-existing workflows service to start scheduled work and auto-resume to continue an
-exact session after a quota limit. Do not build another scheduler or quota poller.
+Read [operations.md](operations.md) for tracker commands. Use T3 Code's native
+scheduling, usage and continuation features for execution.
 
 ## Capture and prepare
 
@@ -44,8 +43,8 @@ merged PR or code that meets done-when ends the item with that evidence. A close
 unmerged PR does not establish completion. If another run owns the item, leave its
 claim alone. A stale-looking claim needs inspection before explicit recovery.
 
-Claim ready work through the tracker before changing files. Workflow-assigned
-items already contain the owned run ID. Reuse that claim rather than claiming again.
+Claim ready work through the tracker before changing files. Reuse an existing
+owned run ID rather than claiming the same item again.
 
 ## Execute in a separate worktree
 
@@ -75,31 +74,15 @@ Reconcile the thread's PR links before finishing. Never merge or enable auto-mer
 
 ## Allowance and continuation
 
-Scheduled work starts within 48 hours of the configured weekly reset and preserves
-a 10% reserve across applicable quota windows. Check `<agents-root>/bin/usage`
-for the active subscription at task boundaries and before starting another large
-piece. Percentages are an allowance estimate, not a precise token budget. Do not
-invent remaining tokens or reset times; save progress and stop at the reserve.
+Use T3 Code's native usage view and session continuation. Honor the task's time,
+token and allowance budget; never buy capacity or switch to API billing automatically.
+Before stopping, checkpoint the worktree, branch, checks and next action. Use
+`waiting_quota` for a provider limit and record the exact session reference when
+known. Do not guess a reset time or session ID.
 
-An interactive run may have a user-supplied task/time/token budget. Honor it without
-adding an arbitrary stop after one useful task. For a scheduled run, finish or
-checkpoint its one assigned item; the next workflow tick selects the next task.
-Do not wait through a reset, switch to a paid API, or bypass provider permissions.
-
-Before a possible limit hit, save the actual `session_id`, `session_kind` and the
-user-authorized `resume_expires` timestamp in a checkpoint when those are known.
-On a limit hit, checkpoint `waiting_quota` with the worktree, branch, completed
-pieces, pending checks and next step. With `auto_resume` enabled, the workflow arms
-that exact session after the runner exits, respecting the adapter's idle guard.
-Use the tracker's `arm` command for an authorized, exact, idle session and record
-its returned auto-resume job. The account assertion and expiry must be known;
-never guess an ID or use `--last`. T3's default adapter may refuse dispatch. Record
-that refusal, preserve the checkpoint, and explain the one setup action needed.
-
-Auto-resume accepting a continuation does not prove completion. A continuation
-first rereads tracker, repo, PR and job state, then updates the same owned run.
-Another limit hit needs another explicitly armed job after inspecting the old one.
-Do not replay an uncertain launch or clear claims simply because time passed.
+A continuation rereads the tracker and current repo/PR state before acting. Resume
+the same owned run; never replay an uncertain launch or assume continuation means
+completion. The tracker records progress; it does not launch or schedule agents.
 
 ## Hand off results
 

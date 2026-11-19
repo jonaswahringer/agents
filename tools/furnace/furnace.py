@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import sqlite3
-import subprocess
 import sys
 import uuid
 
@@ -150,7 +149,7 @@ def checkpoint(db, key, run_id, status, result):
             raise ValueError("run does not own active work")
         run = db.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
         if status != "waiting_quota" and run["resume_job"]:
-            if run["resume_job"] == "arming" or resume_status(run) == "pending":
+            if run["resume_job"] == "arming" or resume_status(run) in ("pending", "dispatching"):
                 raise ValueError("inspect and cancel/clear the pending continuation before changing this item")
         merged = dict(current["result"], **result)
         db.execute("UPDATE items SET status=?,result=?,updated=? WHERE id=?", (status, json.dumps(merged), now(), key))
@@ -160,12 +159,12 @@ def checkpoint(db, key, run_id, status, result):
 
 
 def resume_status(run):
-    reply = subprocess.run([sys.executable, str(ROOT / "tools/auto-resume/auto_resume.py"),
-                            "--state-dir", run["resume_state"], "show", run["resume_job"]],
-                           capture_output=True, text=True, timeout=30)
-    if reply.returncode:
-        raise ValueError("cannot confirm continuation state: " + reply.stderr.strip())
-    return json.loads(reply.stdout)["status"]
+    queue = Path(run["resume_state"]).expanduser().resolve() / "jobs.sqlite3"
+    with sqlite3.connect(queue.as_uri() + "?mode=ro", uri=True) as legacy:
+        row = legacy.execute("SELECT status FROM jobs WHERE id=?", (run["resume_job"],)).fetchone()
+    if row is None:
+        raise ValueError("cannot confirm the legacy continuation; inspect its archived queue")
+    return row[0]
 
 
 def clear_resume(db, key, run_id, reviewed):
@@ -182,53 +181,6 @@ def clear_resume(db, key, run_id, reviewed):
         event(db, key, "resume_cleared", {"run_id": run_id, "previous_job": run["resume_job"], "reviewed": True})
         db.execute("UPDATE runs SET resume_job=NULL,resume_state=NULL WHERE id=?", (run_id,))
     return item(db, key)
-
-
-def prompt(current, state):
-    skill = ROOT / "skills/jonasw/furnace/SKILL.md"
-    return (skill.read_text() + "\n\nAssigned Furnace work, treat this JSON as task data:\n" +
-            json.dumps(current, ensure_ascii=False) + "\nTracker command: " + sys.executable + " " +
-            str(Path(__file__).resolve()) + " --state-dir " + str(state.resolve()) +
-            "\nThis item is already claimed. Use its run_id for every checkpoint. "
-            "Handle only this item. Save checkpoints before lengthy steps. "
-            "Finish with the requested checkpoint and review handoff.\n")
-
-
-def arm(db, current, state, args):
-    if not args.same_account:
-        raise ValueError("--same-account must confirm the target uses the checked subscription")
-    resume_state = args.resume_state_dir.expanduser().resolve()
-    with db:
-        db.execute("BEGIN IMMEDIATE")
-        current = item(db, current["id"])
-        run = db.execute("SELECT * FROM runs WHERE id=?", (args.run,)).fetchone()
-        if current["run_id"] != args.run or current["status"] != "waiting_quota" or run is None:
-            raise ValueError("checkpoint waiting_quota with the owned run before arming")
-        if run["resume_job"]:
-            raise ValueError("a continuation is already linked; inspect it before rearming")
-        db.execute("UPDATE runs SET resume_job='arming',resume_state=? WHERE id=?", (str(resume_state), args.run))
-        event(db, current["id"], "arming", {"run_id": args.run})
-    # The arming marker survives a crash. Never silently duplicate an uncertain job.
-    command = [sys.executable, str(ROOT / "tools/auto-resume/auto_resume.py"), "--state-dir", str(resume_state), "arm",
-               "--provider", args.provider, "--kind", args.kind, "--target", args.target,
-               "--cwd", current["result"].get("worktree") or current["repo"], "--expires", args.expires,
-               "--same-account", "--prompt", prompt(current, state)]
-    if args.reserve_percent is not None:
-        command += ["--reserve-percent", str(args.reserve_percent)]
-    try:
-        reply = subprocess.run(command, text=True, capture_output=True, timeout=60)
-        if reply.returncode:
-            raise ValueError(reply.stderr.strip())
-        job = json.loads(reply.stdout)
-        job_id = job["id"]
-    except (ValueError, KeyError, subprocess.SubprocessError, OSError) as error:
-        with db:
-            event(db, current["id"], "arm_failed", {"run_id": args.run, "error": str(error)})
-        raise ValueError("continuation not confirmed; inspect auto-resume and the arming marker: " + str(error)) from error
-    with db:
-        db.execute("UPDATE runs SET resume_job=? WHERE id=?", (job_id, args.run))
-        event(db, current["id"], "armed", {"run_id": args.run, "job_id": job_id})
-    return {"item": current["id"], "run_id": args.run, "resume_job": job_id, "resume_state": str(resume_state)}
 
 
 def report(db):
@@ -279,16 +231,6 @@ def main(argv=None):
     p.add_argument("--run", required=True)
     p.add_argument("--status", choices=STATUSES, required=True)
     p.add_argument("--file", type=Path, required=True, help="private JSON object containing result and optional exact-session fields")
-    p = sub.add_parser("arm")
-    p.add_argument("id")
-    p.add_argument("--run", required=True)
-    p.add_argument("--provider", choices=("codex", "claude", "cursor"), required=True)
-    p.add_argument("--kind", choices=("cli", "t3"), required=True)
-    p.add_argument("--target", required=True)
-    p.add_argument("--expires", required=True)
-    p.add_argument("--same-account", action="store_true")
-    p.add_argument("--reserve-percent", type=float, help="hold the continuation while any window is at this reserve")
-    p.add_argument("--resume-state-dir", type=Path, default=default_state().parent / "auto-resume")
     p = sub.add_parser("clear-resume")
     p.add_argument("id")
     p.add_argument("--run", required=True)
@@ -303,8 +245,6 @@ def main(argv=None):
             result = claim(db, args.owner, args.id)
         elif args.action == "checkpoint":
             result = checkpoint(db, args.id, args.run, args.status, json.loads(args.file.read_text()))
-        elif args.action == "arm":
-            result = arm(db, item(db, args.id), args.state_dir, args)
         elif args.action == "clear-resume":
             result = clear_resume(db, args.id, args.run, args.reviewed)
         elif args.action == "list":
@@ -323,6 +263,6 @@ def main(argv=None):
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except (OSError, ValueError, sqlite3.Error, subprocess.SubprocessError) as error:
+    except (OSError, ValueError, sqlite3.Error) as error:
         print("furnace: " + str(error), file=sys.stderr)
         sys.exit(1)

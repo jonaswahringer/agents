@@ -1,5 +1,8 @@
 # usage
 
+Deprecated and currently unmaintained; T3 Code provides the active usage view.
+The executable remains in `tools/usage/usage` for compatibility.
+
 One command that answers "how much quota do I have left, and when does it reset?"
 across Claude Code, Codex and Cursor.
 

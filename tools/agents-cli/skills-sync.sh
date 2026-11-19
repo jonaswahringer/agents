@@ -2,7 +2,7 @@
 # This is a source-maintenance command, separate from installation and updates.
 # Keep it compatible with macOS Bash 3.2 and standard Git/Unix tools.
 set -eo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 die() { echo "agents skills sync: $*" >&2; exit 1; }
 usage() { die "usage: agents skills sync folder [--add name] [--ref ref] [--dry-run]"; }
@@ -162,7 +162,7 @@ merge_file() {
 for ((index=0; index<${#names[@]}; index++)); do
   name="${names[$index]}"; path="${paths[$index]}"
   [[ -f "$stage/next/$path/SKILL.md" ]] || die "$name was removed or moved upstream; update its manifest path or mark it local before syncing"
-  bash "$ROOT/bin/agents" _validate_skill "$stage/next/$path/SKILL.md" "$name" || die "invalid upstream metadata for $name"
+  bash "$ROOT/tools/agents-cli/agents-cli" _validate_skill "$stage/next/$path/SKILL.md" "$name" || die "invalid upstream metadata for $name"
   base_dir="$stage/base/$path"
   if [[ ! -f "$base_dir/SKILL.md" ]]; then
     if [[ -e "$group/$name" ]]; then base_dir="$(find_skill "$stage/base" "$name")"
@@ -181,7 +181,7 @@ for ((index=0; index<${#names[@]}; index++)); do
     merge_file "$base_dir/$file" "$ours_dir/$file" "$theirs_dir/$file" "$merged/$file" "$folder/$name/$file"
   done < "$stage/files"
   if [[ $conflicts -eq $before ]]; then
-    bash "$ROOT/bin/agents" _validate_skill "$merged/SKILL.md" "$name" || die "invalid merged metadata for $name"
+    bash "$ROOT/tools/agents-cli/agents-cli" _validate_skill "$merged/SKILL.md" "$name" || die "invalid merged metadata for $name"
     rm -rf "$stage/result/$name"
     cp -R "$merged" "$stage/result/$name"
     if ! diff -r "$ours_dir" "$merged" >/dev/null 2>&1; then echo "Updated $folder/$name"; fi

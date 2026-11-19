@@ -1,354 +1,38 @@
 # agents
 
-Shared instructions, skills, and tools for coding agents. One installer manages
-the agent configuration, selected skills, and local commands.
+Shared instructions, skills and tools for coding agents. One installer manages
+the machine profile, selected skills and local commands.
 
-## What's here
+| Area | Purpose |
+| --- | --- |
+| [Setup](setup/README.md) | Install and configure shared instructions and commands. |
+| [agents CLI](tools/agents-cli/README.md) | Update, select skills, inspect links and sync upstream copies. |
+| [Skills](skills/) | Reusable instructions, grouped by author. |
+| [Furnace](tools/furnace/README.md) | A private backlog with claims, checkpoints and review reports. |
+| [Comms](tools/comms/README.md) | Publish reports and media to reachable tailnet URLs. |
+| [Frameworks](frameworks/README.md) | Organize agent work with delta-flume. |
+| [usage](tools/usage/README.md) | Deprecated quota CLI, retained for existing users. |
 
-| Tool | What it does | Entry point |
-| --- | --- | --- |
-| `agents` | Installs and updates shared instructions, skills, and commands. | `agents update`, `agents skills`, `agents doctor` |
-| [usage](docs/usage.md) | Shows remaining Claude Code, Codex, and Cursor allowance and reset times. | `usage`, `usage live`, `usage --json` |
-| [furnace](tools/furnace/README.md) | Saves ideas and tracks agent work, checks, PRs, and next actions. | `furnace add "Idea"`, `furnace list`, `furnace report` |
-| [comms](tools/comms/README.md) | Publishes HTML reports and recordings to URLs reachable over the tailnet. | Postplan CLI for HTML; `bun run publish-media` in `tools/comms` for recordings |
-| [workflows](tools/workflows/README.md) | Runs recurring jobs, including the T3 update digest and ready Furnace tasks. | `python3 tools/workflows/workflows.py` |
-| [auto-resume](tools/auto-resume/README.md) | Continues an explicitly armed session after subscription quota returns. | `tools/auto-resume/auto-resume` |
-
-[frameworks/](frameworks/README.md) holds frameworks for organizing agent work, such as
-delta-flume.
-
-The installer links `agents`, `usage`, and `furnace` into `~/.local/bin/` on each
-machine. If the `usage` name is taken, it uses `aiusage`. Agent skills are selected
-separately. The services need their own setup; their documentation covers credentials,
-private state, and activation.
-
-## Install
+## Start
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/main/install.sh)"
-```
-
-The installer opens a keyboard menu:
-
-```text
-  agents / setup                                                   4 of 103 selected
-  1 jonasw  2 mattp  3 pstack  4 tstack
-
-    [ ] Global config  Shared AGENTS.md for Claude Code and Codex
-    [-] Skills                                                                 4/103
-      ▸ [-] jonasw                                                              2/14
-      ▾ [-] mattp                                                               2/22
-        [x] ask-matt                  Ask which skill or flow fits your situation
-  ❯     [ ] code-review               Review the changes since a fixed point (commi…
-        [x] codebase-design           Shared vocabulary for designing deep modules
-        [ ] diagnosing-bugs           Diagnosis loop for hard bugs and performance…
-        [ ] domain-modeling           Build and sharpen a project's domain model
-        [ ] find-skills               Helps users discover and install agent skills…
-    ↓ 18 more
-  ──────────────────────────────────────────────────────────────────────────────────
-  Review the changes since a fixed point (commit, branch, tag, or merge-base) along
-  two axes: Standards (does the code follow this repo's documented coding standards…
-
-  ↑↓ move   ←→ collapse/expand   space toggle   enter continue   q cancel
-```
-
-Skills are grouped in folders named after whoever wrote them. Use the arrow keys to
-move, Space to toggle an item, and Enter to save and install. `agents skill` is an
-alias for `agents skills`.
-
-- Press a creator's number to jump directly to it, such as `2` for `mattp` or `3`
-  for `pstack`. Numbers follow the folders found on disk and appear above the list.
-- Press a creator's first letter to jump to it, such as `m` for `mattp`. When
-  creators share an initial, repeating the letter cycles between them.
-- Folders start collapsed. Right arrow expands the folder under the cursor, and
-  pressing it again steps onto its first skill. Left arrow collapses the folder,
-  moving the cursor back onto it from one of its skills.
-- Up and down only move the cursor; they never expand or collapse a folder.
-- Each skill shows the first sentence of its description. The area under the list
-  shows the full description of the highlighted row; short terminals leave it out.
-- When two selected folders ship the same skill name, the one that loses says
-  `skipped, <folder>/<name> installs '<name>'` in yellow.
-- Long folders scroll within the terminal, keeping the cursor and controls visible.
-  `↑ N more` and `↓ N more` show how much is out of view. Home/End jump to the
-  first/last item, and Page Up/Down move a page at a time.
-- Toggling a folder selects or clears every skill in it.
-- Toggling `Skills` selects or clears everything.
-- A `[-]` mark means only some of the skills below are selected.
-- `q`, Escape, or Ctrl+C cancels without saving changes.
-
-The menu highlights the current row and the creator it belongs to, and shows
-selected totals for each folder. Colors come from the terminal's own palette.
-Set `NO_COLOR=1` to disable styling; a locale that is not UTF-8 gets ASCII
-glyphs. Leaving the menu restores the terminal. After saving, a spinner runs next
-to `Updating skills` until installation finishes. It pauses for file replacement
-prompts and clears before the result.
-
-The global setup asks about you, this machine, network access, how work moves between machines, and your preferred tools. The answers stay on your machine under `~/.config/agents/`; they are not stored in this repository.
-
-## What gets installed
-
-The managed source lives at `~/.local/share/agents/`. The `agents`, `usage`, and
-`furnace` commands are linked into `~/.local/bin/`; keep that directory in `PATH`.
-An unrelated existing command is kept unless you approve its replacement.
-
-Global instructions are written to:
-
-- `~/.agents/AGENTS.md`, the canonical file
-- `~/.claude/CLAUDE.md`, linked to the canonical file
-- `~/.codex/AGENTS.md`, linked to the canonical file
-
-Selected skills are linked into the skill directories for agents, Claude Code, and
-Codex. A skill is linked under its own name, without the folder, because that is the
-name agents load it by. When you select skills with the same name from several
-folders, each one installs as `FOLDER-NAME`, such as `mattp-teach` and `pstack-teach`.
-The plain name `teach` then becomes a short skill that agents generates. It lists both
-skills with their descriptions and tells the agent to pick the one that fits, so skills
-and people that ask for `teach` still reach one. The renamed copy changes only the
-`name` line and links every other file to the source. `agents doctor` reports a
-generated skill that no longer matches its source as stale; `agents update` rebuilds
-it.
-
-The global instructions use `jonasw/nice`, so selecting global configuration also
-selects that skill. Other skills remain optional. The installer rejects a skill if
-its required front matter is missing or its `name` does not match its directory.
-
-The installer handles existing configuration without guessing:
-
-- A link that already resolves to the canonical file is kept.
-- A byte-for-byte duplicate file is replaced with the shared link.
-- A file previously generated by `agents` is backed up and migrated.
-- A separate file, broken link, or link to another config is kept unless you approve replacement. Non-interactive installs require `--force`.
-- A directory at a config target stops installation and is never replaced.
-
-Every replaced conflict receives a timestamped backup beside the original path.
-
-Make sure `~/.local/bin` is in your `PATH` so the command is available in new shells.
-
-## The `usage` command
-
-The installer also links a quota tracker that reports how much Claude Code, Codex and
-Cursor allowance is left and when each resets. All three are asked at once, and each
-one appears the moment it answers. See [docs/usage.md](docs/usage.md).
-
-```text
-Claude Code
-  5-hour session       [####................]  81% left  resets in 1h 49m
-  Weekly (all models)  [###############.....]  26% left  resets in 10h 59m
-
-Codex  [plus]
-  Weekly               [####################]   0% left  resets in 2d 18h
-
-Cursor  [pro]
-  Cursor models        [....................]  99% left  resets in 30d 16h
-  Other models         [....................] 100% left  resets in 30d 16h
-```
-
-`usage live` keeps that view open, refreshing every three minutes. Press `r` to
-reload the other providers sooner; Claude keeps its server-requested cooldown.
-
-If another command on the machine already provides the name `usage`, it installs as
-`aiusage` instead and tells you. Pass `--force` to take the name anyway, or set
-`AGENTS_USAGE_NAME` to choose a different one. `agents doctor` reports whichever name
-is in use.
-
-## Tools
-
-`tools/` contains the Furnace tracker and the comms, workflows, and auto-resume
-services listed above. Selecting an agent skill does not start a service.
-
-Furnace's CLI is installed automatically on fresh installs and repaired by
-`agents update`. Select the optional `jonasw/furnace` skill through `agents skills`
-to let an agent capture ideas, work in separate worktrees, and open PRs for review.
-The tracker works without that skill. Scheduled runs require private setup, with
-a default 48-hour reset window and 10% allowance reserve.
-
-Comms requires Bun and a configured endpoint. Workflows and auto-resume require
-private configuration and timers. Each tool's documentation explains activation.
-The installer starts no server, schedules no job, and launches no agent.
-
-The Furnace backlog, workflow history, and continuation queue stay on the machine
-running them, outside Git. Updating on your MacBook does not copy records from
-the Mac mini. Use your existing remote access to work with the Mac mini's backlog.
-
-The comms launchd service and the example cron entries point at this checkout
-rather than at the installed copy. `git clean -xd` here would remove comms
-dependencies and stop that service. See each tool's README for activation.
-
-## Update or change the setup
-
-```sh
-agents update
-agents update --skills
-agents configure
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/main/setup/install.sh)"
 agents skills
-agents skills add mattp/tdd
 agents doctor
 ```
 
-Updates restore the local command links as well as the saved skill selection.
-If `furnace` is missing, run `agents update` on that machine, check that
-`~/.local/bin/` is in `PATH`, and use `agents doctor` to inspect its link.
+Use `agents update` to update an installation. Setup details and non-interactive
+options are in [setup/](setup/README.md).
 
-## See where files come from
-
-```sh
-agents source
-agents skills source
-agents doctor --verbose
-```
-
-`agents source` shows the folder `agents` runs from, whether `agents update`
-replaces it or it is a Git checkout you pull yourself, and how `~/.claude/CLAUDE.md`
-and `~/.codex/AGENTS.md` link to the shared `~/.agents/AGENTS.md`.
-
-`agents skills source` lists each skills folder with how many of its skills are
-selected, then shows the source folder behind every selected skill. A link that is
-missing or points somewhere else gets its own `!` line.
-
-`agents doctor --verbose` runs the usual checks, then prints both reports.
-
-`agents update` downloads the newest repository version and restores the saved
-skill selection. It does not ask for the global configuration again or regenerate
-the file. It can replace known legacy lines and add the user-input tool rule in an
-installer-managed global file while preserving profile answers and personal additions.
-
-A selection saved before skills were grouped in folders still works: each saved name is matched to the folder it now lives in, and links left pointing at the old location are repaired. A saved skill that has since been removed is reported and dropped.
-
-An update does not change optional skill selections. It only ensures that `nice` is
-present when global configuration is enabled. The update ends by saying how many
-optional skills it left out. Run `agents update --skills` to open the menu straight
-after updating, or `agents skills` at any time to reopen it. Cancelling that menu
-with `q` keeps the saved selection and still finishes the update.
-
-For the same reason, `agents skills --none` keeps `nice` while global configuration
-is enabled. Install with `--no-config` to manage skills without that requirement.
-
-Run `agents configure` when you want to change the saved answers.
-
-`agents skills add mattp/tdd` adds one skill while keeping the saved selection.
-Use `folder/name` when more than one folder ships that name. A competing selected
-version must be deselected through `agents skills` first.
-
-Copied upstream skills are maintained in a Git checkout with
-`./bin/agents skills sync mattp`. It merges upstream edits into reviewable source
-changes and lists new candidates. Import one with
-`./bin/agents skills sync mattp --add pr`. See [skills syncing](docs/skills-sync.md)
-for dry runs, conflicts, and manifests. Installing and updating never fetch skills
-directly from their upstream repositories.
-
-## Non-interactive install
-
-Install everything without opening the menu:
-
-```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/jonaswahringer/agents/main/install.sh)" -- --all
-```
-
-Select specific skills or skip global configuration:
-
-```sh
-./install.sh --skills nice,commit --no-config
-```
-
-`--skills` accepts a folder name to take everything in it, and `folder/name` when the
-same skill name exists in more than one folder:
-
-```sh
-./install.sh --skills jonasw,mattp/teach
-```
-
-The profile prompts also accept these environment variables for automated machine setup:
-
-- `AGENTS_PROFILE_ABOUT_ME`
-- `AGENTS_PROFILE_MACHINE`
-- `AGENTS_PROFILE_NETWORK`
-- `AGENTS_PROFILE_SYNC`
-- `AGENTS_PROFILE_TOOLING`
-
-## Included skills
-
-Skills live under `skills/<folder>/<name>/SKILL.md`. The folder names whoever wrote
-them, so you can take one person's set without reading through the rest. Adding a
-folder to the repository is enough to make it appear in the menu.
-
-### `jonasw`
-
-- `c4-explorer` explores repository architecture through source-backed C4 diagrams, traced behaviors, and animated drill-down. Includes reusable HTML, CSS, JavaScript, and an offline builder for demos and project models.
-- `commit` writes commit messages as terse changelog headlines and asks before running `git commit`.
-- `executive-summary` writes you an executive summary with the bottom line first, so you can stop after one sentence.
-- `furnace` turns spare weekly allowance into reviewable work, with a persistent idea backlog and task history.
-- `goals` turns vague aspirations into concrete deliverable goals and tracks them over time.
-- `html-communication` presents an answer as a self-contained HTML page.
-- `hyperframes-promo` creates product promos under the project's `marketing/` folder, defaults to 60 fps, ignores media files in Git, and delivers videos through comms over Tailscale.
-- `nice` makes user-facing answers top-down and concise, uses tables, diagrams, or interactive HTML when they read faster than prose, and stays honest about evidence.
-- `note` captures a durable note from the current conversation.
-- `pair` pairs with you on code, product, UI and UX, architecture, testing, marketing, learning, or research toward two goals: a finished artifact and your understanding of it. It pulls in a topic template, keeps taste calls with you, and checks your grasp as you go.
-- `research-ricky` researches complex and technical concepts.
-- `rnd` explores an idea before committing to a direction.
-- `tidy` finds stale git worktrees across projects or under one folder, shows what each one would cost to restore, and removes only the ones you approve.
-- `work-smart-not-hard` chooses a suitable model and reasoning effort for delegated work.
-
-### `mattp`
-
-Matt Pocock's engineering skills: an idea-to-ship flow built from `grill-with-docs`,
-`to-spec`, `to-tickets`, `triage`, `implement`, and `code-review`, plus `teach`,
-`tdd`, `prototype`, `handoff`, `wayfinder`, and the `codebase-design` and
-`domain-modeling` vocabularies. Run `setup-matt-pocock-skills` once per repository
-before using the rest, and `ask-matt` when you want to know which one fits.
-
-### `pstack`
-
-Lauren Tan's (poteto) skills from Cursor's pstack plugin: `architect`, `arena`,
-`swarm`, `interrogate`, `figure-it-out`, `how`, `why`, `reflect`, `recall`, `unslop`,
-`no-comments`, `technical-writing`, `typescript-best-practices`, its own `tdd` and
-`teach`, and a large set of `principle-*` skills covering one engineering principle
-each. `statechart` checks a TLA+ model and draws it as a Mermaid statechart; it needs
-Node 22.18+, Bun, or Deno, and its first run installs TLC and Java with mise.
-`create-formal-verification-skill` and `maintain-formal-verification-skill` set up
-and maintain a project's formal verification. `ketchup`, `in-your-own-words`, `sharpen`, and `correct` catch you up, play back
-the goal, deepen a prompt, and stop repeated agent mistakes. Run `setup-pstack` once
-per repository, and `poteto-help` when you want to know which skill fits.
-
-### `tstack`
-
-Theo Browne's pull request skills: `full-send` takes a change all the way to a
-merged PR, `full-stop` does the same but leaves the merge to you, `council` and
-`sol-loop` get cross-model review, and `file-pr`, `babysit-pr`, `modernize`,
-`takeover`, and `leaving-pr-comments` cover filing, watching, rebasing, finishing,
-and commenting. Some call others, so install them together: `full-send` needs
-`sol-loop`, `file-pr`, and `babysit-pr`, and `takeover` needs `modernize`.
-They need an authenticated `gh`, `python3` for `babysit-pr`, and models from other
-providers for `council` and `sol-loop`.
-
-Saved `nice-to-read` selections migrate to `jonasw/nice` during installation or
-update. The old managed links are removed. `pstack/unslop` remains available for
-explicit prose editing, but the global instructions no longer require it for every
-response.
-
-Saved `minj/c4-explorer` selections migrate to `jonasw/c4-explorer` on update.
-
-## Development
-
-Run the dependency-free test suite with:
+## Develop
 
 ```sh
 ./tests/test.sh
-```
-
-That covers the installer and `usage`. To also run every suite under `tools/`,
-which needs Python 3.9+ and, for comms and the T3 adapter, Bun:
-
-```sh
 ./tests/all.sh
-PYTHON=/usr/bin/python3 ./tests/all.sh   # the same with macOS's Python 3.9
 ```
 
-It reports passed, skipped, and failed suites, and exits nonzero on any failure.
+See [setup checks](setup/README.md#checks) for prerequisites. Ideas live in
+[IDEAS.md](IDEAS.md). Profiles and tool state stay outside Git on each machine.
 
-Set `AGENTS_SOURCE_DIR` to install or update from a local checkout instead of GitHub.
-
-## Skills still wanted
-
-- `teach` — a customized Matt Pocock teaching skill based on the knowledge-tree idea and an improved EITMLIF variant.
-- `get-it-going` — a deep-thinking skill that focuses on getting the most out of the human.
-- `plan` — a skill that builds a plan from snippets, articles, and paragraphs written by the human.
+The retired `auto-resume` and `workflows` tools are preserved on the
+`archive/t3-runtime-tools` branch. T3 Code handles scheduling and continuation.
