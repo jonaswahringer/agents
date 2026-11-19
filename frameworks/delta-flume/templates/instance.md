@@ -13,7 +13,7 @@ status: active
 
 ## Scope
 
-<!-- Which parts of the project does it cover, and which does it leave alone? It shares no file with another instance of the same type. -->
+<!-- Which parts of the project does it cover, and which does it leave alone? It claims no subject another instance of the same type covers; a shared file is fine when each keeps a different part. -->
 
 ## Overrides
 

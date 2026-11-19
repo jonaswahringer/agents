@@ -107,7 +107,7 @@ Done when every instance section and every finding has an answer.
 ## 6. Check
 
 - Each `vessel` names an existing type and matches its instance's folder, and each `status` is `active` or `paused`.
-- No two instances of one type share a file.
+- No two instances of one type claim the same subject.
 - `vessels/README.md` lists every instance with its trigger and where it runs, and no placeholder is left.
 - Every command, script and path in AGENTS.md and `vessels/README.md` exists.
 - Neither file holds a secret value.
