@@ -59,9 +59,9 @@ Loose trigger ─► Triage ─► Route (human) ─────┘
 ```
 Trigger ─► Gateway ─────► Agent loop ────────────────────────► Land ─► Output
            Accept         Write ─► Verify ─► Findings ─ none ─┘    │
-           Start            ▲  ▲                │                  ├─ changes requested ─► back to Write
-           Estimate         │  └─── findings ───┘                  └─ rejected ─► closed
-             │
+           Start            ▲  ▲                │                  ├─ rejected ─► closed
+           Estimate         │  └─── findings ───┘                  │
+             │              └──────────── changes requested ───────┘
              └─ not accepted ─► logged    (not started yet: queue)
 
 Watcher: tracks tokens and time against the estimate, and silence.
