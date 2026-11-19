@@ -55,7 +55,7 @@ class Menu:
                 env["NO_COLOR"] = "1"
             fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, columns, 0, 0))
             shell = env.get("AGENTS_TEST_BASH", "/bin/bash")
-            os.execve(shell, [shell, str(ROOT / "bin/agents"), command], env)
+            os.execve(shell, [shell, str(ROOT / "tools/agents-cli/agents-cli"), command], env)
         self.original_terminal = termios.tcgetattr(self.fd)
 
     def read(self, timeout=0.1):

@@ -12,7 +12,7 @@ from unittest import mock
 
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCE = os.path.join(ROOT, "bin", "usage")
+SOURCE = os.path.join(ROOT, "tools", "usage", "usage")
 
 
 def load_usage():

@@ -21,10 +21,16 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$url" && -n "$output" ]]
+if [[ -n "${FAKE_UPDATE_CALLS:-}" ]]; then
+  printf '%s\n' "$url" >> "$FAKE_UPDATE_CALLS"
+fi
 
 case "$url" in
-  https://raw.githubusercontent.com/*\?*)
+  https://raw.githubusercontent.com/*/setup/install.sh\?*)
     cp "$FAKE_UPDATE_INSTALLER" "$output"
+    ;;
+  https://raw.githubusercontent.com/*/install.sh\?*)
+    cp "${FAKE_UPDATE_BOOTSTRAP:-$FAKE_UPDATE_INSTALLER}" "$output"
     ;;
   https://raw.githubusercontent.com/*)
     echo "bootstrap URL did not have a cache key: $url" >&2

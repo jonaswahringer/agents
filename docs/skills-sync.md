@@ -28,8 +28,8 @@ it does not add to it.
 Run the command from the agents checkout whose source you want to maintain:
 
 ```sh
-./bin/agents skills sync mattp --dry-run
-./bin/agents skills sync mattp
+./tools/agents-cli/agents-cli skills sync mattp --dry-run
+./tools/agents-cli/agents-cli skills sync mattp
 git diff -- skills/mattp
 ```
 
@@ -56,7 +56,7 @@ whole skills or change saved selections.
 The sync lists upstream candidates that have no manifest entry. Import one by name:
 
 ```sh
-./bin/agents skills sync mattp --add pr
+./tools/agents-cli/agents-cli skills sync mattp --add pr
 ```
 
 This syncs the existing tracked set too. It adds the complete `pr` directory and a

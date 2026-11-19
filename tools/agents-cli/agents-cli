@@ -14,7 +14,7 @@ while [[ -L "$SCRIPT_PATH" ]]; do
     SCRIPT_PATH="$SCRIPT_DIRECTORY/$LINK_TARGET"
   fi
 done
-ROOT="$(cd "$(dirname "$SCRIPT_PATH")/.." && pwd)"
+ROOT="$(cd "$(dirname "$SCRIPT_PATH")/../.." && pwd)"
 CONFIG_DIR="${AGENTS_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/agents}"
 PROFILE_DIR="$CONFIG_DIR/profile"
 SELECTED_FILE="$CONFIG_DIR/selected-skills"
@@ -1307,13 +1307,11 @@ configure_global() {
   read_profile_value sync "How should work move between this machine and your other machines?" "Add your Git, file sync, or remote development workflow."
   read_profile_value tooling "Which tools, languages, package managers, and conventions should agents use?" "Add your preferred tools and workflow rules."
 
-  render_template "$ROOT/templates/AGENTS.md" "$AGENTS_DIR/AGENTS.md"
+  render_template "$ROOT/setup/templates/AGENTS.md" "$AGENTS_DIR/AGENTS.md"
   install_global_config_links
 }
 
-# A link into this repository's skills tree, or into the canonical skills directory,
-# is one this tool made. Moving a skill into a folder may leave such a link broken,
-# and repointing it needs no approval.
+# Known installed links can be repaired after source files move.
 link_is_managed() {
   local target="$1" destination directory
   [[ -L "$target" ]] || return 1
@@ -1323,7 +1321,7 @@ link_is_managed() {
     destination="$directory/$destination"
   fi
   case "$destination" in
-    "$ROOT"/skills/*|"$AGENTS_DIR"/skills/*) return 0 ;;
+    "$ROOT"/skills/*|"$AGENTS_DIR"/skills/*|"$ROOT/bin/usage") return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -1365,8 +1363,8 @@ safe_link() {
 
 # Reports the command name actually installed, so install and doctor agree.
 resolved_usage_name() {
-  local source="$ROOT/bin/usage" existing
-  if link_points_to "$BIN_DIR/$USAGE_NAME" "$source"; then
+  local source="$ROOT/tools/usage/usage" existing
+  if usage_link_is_managed "$BIN_DIR/$USAGE_NAME"; then
     echo "$USAGE_NAME"
     return 0
   fi
@@ -1380,8 +1378,14 @@ resolved_usage_name() {
   fi
 }
 
+usage_link_is_managed() {
+  local target="$1"
+  link_points_to "$target" "$ROOT/tools/usage/usage" ||
+    { [[ -L "$target" ]] && [[ "$(readlink "$target")" == "$ROOT/bin/usage" ]]; }
+}
+
 install_usage_command() {
-  local source="$ROOT/bin/usage" name existing
+  local source="$ROOT/tools/usage/usage" name existing
   [[ -f "$source" ]] || return 0
   name="$(resolved_usage_name)"
   if [[ "$name" != "$USAGE_NAME" ]]; then
@@ -1392,7 +1396,7 @@ install_usage_command() {
   # Remove a stale link under the other name so only one copy survives.
   local other="$USAGE_NAME"
   [[ "$name" == "$USAGE_NAME" ]] && other="$USAGE_FALLBACK_NAME"
-  if link_points_to "$BIN_DIR/$other" "$source"; then
+  if usage_link_is_managed "$BIN_DIR/$other"; then
     rm "$BIN_DIR/$other"
   fi
   safe_link "$source" "$BIN_DIR/$name"
@@ -1690,7 +1694,7 @@ install_command() {
 skills_command() {
   if [[ "${1:-}" == "sync" ]]; then
     shift
-    bash "$ROOT/tools/skills-sync.sh" "$@"
+    bash "$ROOT/tools/agents-cli/skills-sync.sh" "$@"
     return
   fi
   discover_skills
@@ -1815,7 +1819,7 @@ source_report() {
   echo
 
   heading "Command"
-  link_row "$BIN_DIR/agents" "$ROOT/bin/agents" "$(max_width "$(display_path "$BIN_DIR/agents")")"
+  link_row "$BIN_DIR/agents" "$ROOT/tools/agents-cli/agents-cli" "$(max_width "$(display_path "$BIN_DIR/agents")")"
   echo
 
   heading "Global instructions"
@@ -1917,7 +1921,7 @@ doctor_command() {
       if ! grep -q 'Managed by agents' "$source" 2>/dev/null; then
         echo "skip  $source holds separate instructions, so the template check does not apply"
       else
-        missing="$(render_template_content "$ROOT/templates/AGENTS.md" | grep -vE '^[[:space:]]*$' | grep -Fxvf "$source" || true)"
+        missing="$(render_template_content "$ROOT/setup/templates/AGENTS.md" | grep -vE '^[[:space:]]*$' | grep -Fxvf "$source" || true)"
         if [[ -z "$missing" ]]; then
           echo "ok  $source contains the template instructions and the configured answers"
         else
@@ -1966,7 +1970,7 @@ doctor_command() {
         ;;
     esac
   done < <(plan_installs "${SELECTED[@]}")
-  source="$ROOT/bin/usage"
+  source="$ROOT/tools/usage/usage"
   if [[ -f "$source" ]]; then
     path="$BIN_DIR/$(resolved_usage_name)"
     if link_points_to "$path" "$source"; then
@@ -2001,14 +2005,14 @@ doctor_command() {
 update_command() {
   local bootstrap cache_key tmp
   if [[ -n "${AGENTS_SOURCE_DIR:-}" ]]; then
-    bootstrap="$AGENTS_SOURCE_DIR/install.sh"
-    [[ -f "$bootstrap" ]] || die "AGENTS_SOURCE_DIR does not contain install.sh"
+    bootstrap="$AGENTS_SOURCE_DIR/setup/install.sh"
+    [[ -f "$bootstrap" ]] || die "AGENTS_SOURCE_DIR does not contain setup/install.sh"
     bash "$bootstrap" --update "$@"
   else
     tmp="$(mktemp "${TMPDIR:-/tmp}/agents-bootstrap.XXXXXX")"
     trap 'rm -f "$tmp"' EXIT
     cache_key="${tmp##*.}"
-    curl -fsSL "https://raw.githubusercontent.com/${AGENTS_REPOSITORY:-jonaswahringer/agents}/${AGENTS_REF:-main}/install.sh?update=$cache_key" -o "$tmp"
+    curl -fsSL "https://raw.githubusercontent.com/${AGENTS_REPOSITORY:-jonaswahringer/agents}/${AGENTS_REF:-main}/setup/install.sh?update=$cache_key" -o "$tmp"
     bash "$tmp" --update "$@"
   fi
 }

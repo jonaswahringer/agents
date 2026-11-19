@@ -35,7 +35,7 @@ class SyncTests(unittest.TestCase):
             path.mkdir()
             result = run('git', 'init', '--quiet', str(path))
             self.assertEqual(result.returncode, 0, result.stderr)
-        for relative in ['bin/agents', 'tools/skills-sync.sh']:
+        for relative in ['tools/agents-cli/agents-cli', 'tools/agents-cli/skills-sync.sh']:
             target = self.source / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / relative, target)
@@ -99,7 +99,7 @@ class SyncTests(unittest.TestCase):
                 for p in directory.rglob('*') if p.is_file()}
 
     def sync(self, *args, success=True):
-        result = run('/bin/bash', str(self.source / 'bin/agents'), 'skills', 'sync', 'fixture', *args, env=self.env)
+        result = run('/bin/bash', str(self.source / 'tools/agents-cli/agents-cli'), 'skills', 'sync', 'fixture', *args, env=self.env)
         message = (result.stdout + result.stderr).decode(errors='replace')
         if success:
             self.assertEqual(result.returncode, 0, message)
