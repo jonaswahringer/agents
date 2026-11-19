@@ -14,6 +14,7 @@ A framework for agent work that stays the same while tools change. A **delta** f
 | [diagrams/blueprint.html](diagrams/blueprint.html) | The inside of one vessel. |
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [diagrams/why-vessels.html](diagrams/why-vessels.html) | One slide on why vessels beat role-based agents. |
+| [LICENSE](LICENSE) | MIT. |
 
 ## Layers
 

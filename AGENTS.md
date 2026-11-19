@@ -23,6 +23,11 @@ This repository installs shared agent instructions and skills.
 - Deduplicate equivalent config files and links without discarding unique instructions.
 - Updates must preserve the saved profile and selected skills.
 
+## Frameworks
+
+- `frameworks/delta-flume` is published to the read-only repo jonaswahringer/delta-flume by `.github/workflows/publish-delta-flume.yml` on every push to main. Change it here, never there.
+- Keep links inside `frameworks/delta-flume` relative to that folder, so they work in both repos.
+
 ## Documentation
 
 Write in plain words. Lead with the result, and report failed or skipped checks.

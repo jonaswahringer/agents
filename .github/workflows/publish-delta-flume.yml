@@ -1,0 +1,43 @@
+name: Publish delta-flume
+
+# Copies frameworks/delta-flume, with its history, to the read-only repo
+# jonaswahringer/delta-flume. A push made there by hand makes this fail instead
+# of being overwritten.
+on:
+  push:
+    branches: [main]
+    paths:
+      - frameworks/delta-flume/**
+      - .github/workflows/publish-delta-flume.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-delta-flume
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Split frameworks/delta-flume
+        run: git subtree split --prefix=frameworks/delta-flume -b delta-flume
+
+      - name: Push to jonaswahringer/delta-flume
+        env:
+          DEPLOY_KEY: ${{ secrets.DELTA_FLUME_DEPLOY_KEY }}
+        run: |
+          key="$RUNNER_TEMP/deploy_key"
+          hosts="$RUNNER_TEMP/known_hosts"
+          printf '%s\n' "$DEPLOY_KEY" > "$key"
+          chmod 600 "$key"
+          echo 'github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl' > "$hosts"
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$hosts -o StrictHostKeyChecking=yes"
+          git push git@github.com:jonaswahringer/delta-flume.git delta-flume:refs/heads/main
