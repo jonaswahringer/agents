@@ -135,12 +135,136 @@ The instance's `vessel` field names a type in [vessels/](vessels/) and matches i
 
 To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 
+## flume
+
+`flume` is the command that runs a vessel's deterministic parts. It is a Go program, and all of its code is in [src/](src/).
+
+```sh
+go install github.com/jonaswahringer/delta-flume/src/cmd/flume@latest
+go install github.com/google/osv-scanner/v2/cmd/osv-scanner@v2.7.1   # needed by flume scan
+```
+
+Both land in Go's bin folder, `~/go/bin` by default, which has to be on `PATH`.
+
+| Command | What it does |
+|---|---|
+| `flume serve [project]...` | The server. It holds the queue, decides which node starts which unit, and answers the other commands. With project folders it is also a node, so one machine needs nothing else. |
+| `flume node <project>...` | Makes this machine a node of a server that runs on another machine. It starts the agents of the units the server gives it. |
+| `flume scan [dir]` | Lists the dependencies that have a security advisory, heaviest first. Each finding is one line of JSON with its key and weight. The key names the instance that keeps the project's dependencies: `dependencies`, or what `-instance` says. It runs [osv-scanner](https://google.github.io/osv-scanner/) 2.x, which must be installed and which reads advisories from OSV.dev. |
+| `flume submit` | The gateway's Accept. Reads units on stdin, one JSON object per line with a `key` and a `weight`, and prints a decision for each. |
+| `flume queue` | Lists the units waiting to start, in start order: heaviest first, then longest waiting. `-all` lists every unit with its state, its node, its agent session and its pull request. |
+| `flume log` | Shows what was decided and done, and why, newest last. |
+| `flume branch <key>` | Prints the one branch a unit's agent may write to, for example `vessel/maintenance/dependencies/lodash`. |
+
+The agent runs these inside its worktree:
+
+| Command | What it does |
+|---|---|
+| `flume prepare` | Writes the agent's rules file. T3 Code runs it in each new worktree, before the agent starts. |
+| `flume push` | Pushes the unit's branch, and nothing else. |
+| `flume pr` | Opens the unit's pull request, or updates the one that is open. The unit then waits at Land. |
+
+On one machine:
+
+```sh
+flume serve ~/Projects/tiro ~/Projects/loki   # the server, and a node for these projects
+flume scan ~/Projects/tiro | flume submit     # in another terminal: hand it findings
+flume queue
+```
+
+Accept decides by the unit's key and its content:
+
+| The unit | Decision |
+|---|---|
+| is new | accepted, and queued |
+| is known, with the same content | declined |
+| is queued, with new content | updated, and keeps its place in the queue |
+| is starting or running, with new content | declined, and not stored, so the next submission after the run still counts as new |
+| ended its run, with new content | accepted, and queued again |
+
+### The server and its nodes
+
+flume always runs as one server with nodes, also on a single machine. It is drawn in [diagrams/flume.html](diagrams/flume.html), and [src/README.md](src/README.md) outlines the code. The server is the only program that touches the units. A node is a machine that has project folders and an agent provider; it starts agents and nothing else.
+
+A node asks the server what it should be working on. The answer is the whole picture: every unit the node should start, and every unit it started that is still running. An answer that gets lost therefore changes nothing, because the next one says the same. The server holds the question open and answers the moment something changes, so a unit starts within a second of being accepted and nothing runs on a timer.
+
+The server gives a unit to a node when all of this holds:
+
+| | |
+|---|---|
+| The node has the unit's project | its folder was named to `flume serve` or `flume node` |
+| The node has room | fewer than `-max-running` units are starting or running there; the default is 1 |
+| The instance is not paused there | `status: paused` in the project's `.delta-flume/vessels/<type>/<instance>.md` on that node |
+| The unit has no session elsewhere | a unit that comes back with new input goes to the node that has its session, its branch and its checkout |
+
+A second machine joins with:
+
+```sh
+flume node -server http://<the server's address>:7117 ~/Projects/tiro
+```
+
+| | |
+|---|---|
+| Where the units are | one SQLite file on the server: `-db`, else `$FLUME_DB`, else `~/.flume/flume.db` |
+| Where a command finds the server | `-server`, else `$FLUME_SERVER`, else `http://127.0.0.1:7117` |
+| Where the server listens | `-listen`, by default on this machine only |
+
+What is not there yet:
+
+- **Scans on a schedule.** Run `flume scan <project> | flume submit` yourself, or from a timer of your own.
+- **A login.** The server asks nobody who they are. Keep it on this machine, or on a network only your machines are on. It warns when `-listen` opens it further.
+- **A service.** Nothing keeps `flume serve` and `flume node` running across a restart. Run them under launchd or systemd.
+- **A lease.** When a node goes away, the units it was working on stay with it.
+- **An alert.** A dead letter shows in the server's log and in `flume queue -all`.
+
+### Starting a unit
+
+What runs the agent is a provider behind one contract, [src/internal/agent](src/internal/agent/agent.go). T3 Code is the provider there is today, and `-agent` names it. The node starts the agent as a T3 Code thread, in a new worktree on the unit's branch.
+
+When the agent does not start, the unit goes back to its place in the queue and waits before the next try. The units behind it start meanwhile.
+
+| | |
+|---|---|
+| The wait after a failed start | 2 minutes, then twice as long each time, up to 1 hour |
+| When flume gives up | at the first failure that comes 6 hours after the first one. The unit becomes a dead letter. |
+| What brings a dead letter back | new input for its key |
+| What forgets the failures | a start that works, or new input |
+
+The agent never names its branch and never publishes on its own:
+
+| The agent wants to | What happens |
+|---|---|
+| work on a branch | flume derives the name from the unit's key, and T3 Code creates it with the worktree |
+| push | `flume push` pushes that branch if the server says a unit that is running owns it. `git push` is denied. |
+| open a pull request | `flume pr` opens one for that branch. `gh pr create` and `gh pr merge` are denied. |
+| create or switch branches | denied |
+
+The denials are a rules file for Claude Code, `.claude/settings.local.json` in the worktree. Its rules hold in every permission mode. The list is in [src/internal/claudecode/rules.go](src/internal/claudecode/rules.go).
+
+One-time setup: in T3 Code, add a project script with the command `flume prepare` that runs when a worktree is created, and make the agent wait for it instead of running it in the background. On a branch that is not a unit's, the script does nothing.
+
+This stops mistakes, not an agent that works around it. The agent runs as you, so it can reach git and your GitHub login by other spellings. A separate GitHub identity that may only push to `vessel/` branches would close that.
+
+### Other programs
+
+flume runs `git`, `gh`, `t3` and `osv-scanner`. Each gets a time limit, so a program that hangs cannot make flume hang:
+
+| Program | Limit |
+|---|---|
+| `osv-scanner` | 5 minutes for one project's scan |
+| `git` | 2 minutes for one command |
+| `gh`, `t3` | 1 minute for one command |
+
+At the limit flume asks the program to stop, kills it 3 seconds later if it has not stopped, and reports the step as failed with what the program wrote. A `flume` that is itself stopped, by Ctrl-C or by a service manager, does the same to the program it is running. A node still tells the server where its unit stands, and the server waits for that before it stops.
+
 ## Files
 
 | Path | What it is |
 |---|---|
+| [src/](src/) | The code of the `flume` command: a Go module with the command in [src/cmd/flume](src/cmd/flume) and its packages in [src/internal/](src/internal/). |
 | [diagrams/overview.html](diagrams/overview.html) | The big picture, with many triggers and several vessels. |
 | [diagrams/blueprint.html](diagrams/blueprint.html) | The inside of one vessel. |
+| [diagrams/flume.html](diagrams/flume.html) | How `flume` runs: the server and its nodes, a unit's life, and what is decided and not built yet. |
 | [diagrams/why-vessels.html](diagrams/why-vessels.html) | One slide on why vessels beat role-based agents. |
 | [diagrams/vs-factory.html](diagrams/vs-factory.html) | One slide comparing delta-flume with a typical software factory. |
 | [vessels/](vessels/) | Vessel types, one file each. |
