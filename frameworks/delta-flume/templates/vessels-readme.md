@@ -1,8 +1,8 @@
-<!-- Copy to <project>/vessels/README.md when the project's first instance is set up. Replace every <placeholder>; text after "for example" inside one only shows the kind of value. Remove the comments. Write names of env vars and secrets only, never their values. -->
+<!-- Copy to <project>/.delta-flume/vessels/README.md when the project's first instance is set up. Replace every <placeholder>; text after "for example" inside one only shows the kind of value. Remove the comments. Write names of env vars and secrets only, never their values. -->
 
 # Vessels in <project>
 
-This project runs [delta-flume](https://github.com/jonaswahringer/delta-flume) vessels. Each file in a type folder is one instance; its front matter says whether it is active or paused. This file holds what only vessels need to run. What every agent needs is in [AGENTS.md](../AGENTS.md).
+This project runs [delta-flume](https://github.com/jonaswahringer/delta-flume) vessels. Each file in a type folder is one instance; its front matter says whether it is active or paused. This file holds what only vessels need to run. What every agent needs is in [AGENTS.md](../../AGENTS.md).
 
 ## Instances
 

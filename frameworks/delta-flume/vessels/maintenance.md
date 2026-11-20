@@ -73,12 +73,12 @@ The markdown guides the agent loop. Everything else is enforced outside the agen
 
 | Part | Enforced by | Kind |
 |---|---|---|
-| Trigger | a scheduled job per instance (cron or a GitHub Action), listed in the project's `vessels/README.md` | d |
+| Trigger | a scheduled job per instance (cron or a GitHub Action), listed in the project's `.delta-flume/vessels/README.md` | d |
 | Weight | a script, when the finding is made | d |
 | Accept | a script: `gh pr list` searches for the key, open or closed | d |
-| Start | a script: is the instance paused (`status` in the project's `vessels/maintenance/<instance>.md`) or overloaded? If so, the finding waits in the queue | d |
+| Start | a script: is the instance paused (`status` in the project's `.delta-flume/vessels/maintenance/<instance>.md`) or overloaded? If so, the finding waits in the queue | d |
 | Estimate | a script for dependency updates, an agent for the rest | d, s |
-| Agent loop | an agent CLI in a git worktree, guided by this file, the instance file, the project's `vessels/README.md` and its AGENTS.md | s |
+| Agent loop | an agent CLI in a git worktree, guided by this file, the instance file, the project's `.delta-flume/vessels/README.md` and its AGENTS.md | s |
 | Verify | CI, then the project's runtime check, then a review agent | d, s |
 | Watcher | compares spend with the estimate; the job's time limit and a token cap enforce the ceiling | d |
 | Land | branch protection: a human approval is required | h |

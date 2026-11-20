@@ -5,7 +5,7 @@ status: active
 
 # <Instance> <type> vessel in <project>
 
-<!-- Copy to <project>/vessels/<type>/<instance>.md. Name the instance after what it keeps, such as dependencies or docs; the name goes into each unit's key. The vessel's purpose and policy live in its type file, vessels/<type>.md in delta-flume; write here only what is true for this instance. The how goes in the project's AGENTS.md when every agent needs it, otherwise in vessels/README.md. status is active or paused; while paused, Start sends units to the queue. -->
+<!-- Copy to <project>/.delta-flume/vessels/<type>/<instance>.md. Name the instance after what it keeps, such as dependencies or docs; the name goes into each unit's key. The vessel's purpose and policy live in its type file, vessels/<type>.md in delta-flume; write here only what is true for this instance. The how goes in the project's AGENTS.md when every agent needs it, otherwise in .delta-flume/vessels/README.md. status is active or paused; while paused, Start sends units to the queue. -->
 
 ## Here
 
