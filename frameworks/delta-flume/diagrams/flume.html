@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>delta-flume: how flume runs</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --c-fg: var(--foreground, #1c1c21);
+    --c-muted: var(--muted-foreground, #6e6e78);
+    --c-card: var(--card, #ffffff);
+    --c-border: var(--border, #dcdce2);
+    --c-soft: var(--secondary, #eeeef2);
+    --c-purpose: var(--info, #2f6fde);
+    --c-policy: var(--warning, #d9822b);
+    --c-human: var(--destructive, #d64545);
+    --c-radius: var(--radius, 8px);
+    --c-d: var(--success, #1f9d55);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --c-fg: var(--foreground, #ececf1);
+      --c-muted: var(--muted-foreground, #9a9aa6);
+      --c-card: var(--card, #17171c);
+      --c-border: var(--border, #2e2e36);
+      --c-soft: var(--secondary, #24242c);
+    }
+  }
+  body { font-family: var(--font-sans, system-ui, sans-serif); color: var(--c-fg); margin: 0; }
+  .wrap { max-width: 1000px; margin: 0 auto; display: flex; flex-direction: column; gap: 22px; }
+  h1 { font-size: 16px; margin: 0; font-weight: 650; }
+  h2 { font-size: 12px; margin: 0 0 8px; color: var(--c-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+  .sub { color: var(--c-muted); font-size: 13px; margin: 3px 0 0; line-height: 1.45; }
+  code { font-family: var(--font-mono, ui-monospace, monospace); font-size: .92em; }
+
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-sans, system-ui, sans-serif); fill: var(--c-fg); }
+  .col { font-size: 13px; font-weight: 700; fill: var(--c-muted) !important; letter-spacing: .06em; }
+  .t { font-size: 15px; font-weight: 650; }
+  .s { font-size: 12.5px; fill: var(--c-muted) !important; }
+  .e { font-size: 12.5px; font-weight: 600; fill: var(--c-muted) !important; }
+  .m { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; }
+  .hum { font-size: 12.5px; font-weight: 700; fill: var(--c-human) !important; }
+  .todo { font-size: 12.5px; font-weight: 600; fill: var(--c-policy) !important; }
+
+  .outside { fill: var(--c-card); stroke: var(--c-fg); stroke-width: 1.3; }
+  .server { fill: var(--c-card); stroke: var(--c-purpose); stroke-width: 2.2; }
+  .mech { fill: var(--c-soft); stroke: var(--c-muted); stroke-width: 1.3; }
+  .later { fill: none; stroke: var(--c-policy); stroke-width: 1.6; stroke-dasharray: 6 4; }
+  .exit { fill: var(--c-card); stroke: var(--c-muted); stroke-width: 1.3; stroke-dasharray: 5 4; }
+  .edge { stroke: var(--c-muted); stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+  .edge.later-edge { stroke: var(--c-policy); stroke-dasharray: 6 4; marker-end: url(#arr-later); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 13px; color: var(--c-muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .sw { width: 26px; height: 14px; border-radius: 4px; }
+  .sw.built { border: 1.3px solid var(--c-fg); }
+  .sw.todo { border: 1.6px dashed var(--c-policy); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--c-border); vertical-align: top; line-height: 1.4; }
+  th { font-size: 12px; color: var(--c-muted); font-weight: 600; }
+  td.q { font-weight: 650; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 1px 8px; white-space: nowrap; }
+  .tag.built { color: var(--c-d); border: 1.5px solid var(--c-d); }
+  .tag.todo { color: var(--c-policy); border: 1.5px dashed var(--c-policy); }
+  @media (max-width: 640px) { td.q { white-space: normal; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>delta-flume: how flume runs</h1>
+    <p class="sub">One server holds the queue and decides. Nodes do the work. This is the design as decided; v0.1 builds the solid parts.</p>
+  </div>
+  <div class="legend">
+    <span><i class="sw built"></i> built in v0.1</span>
+    <span><i class="sw todo"></i> decided, not built yet</span>
+  </div>
+
+  <section>
+    <h2>The server and its nodes</h2>
+    <svg viewBox="0 0 1000 470" role="img" aria-label="A trigger hands units to the server. Nodes ask the server what to work on and report back. An agent in its worktree asks the server before it publishes to GitHub.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--c-muted)"/>
+        </marker>
+        <marker id="arr-later" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--c-policy)"/>
+        </marker>
+      </defs>
+
+      <text class="col" x="10" y="24">TRIGGER</text>
+      <text class="col" x="250" y="24">SERVER (CONTROL PLANE)</text>
+      <text class="col" x="690" y="24">NODES</text>
+
+      <!-- trigger -->
+      <rect class="outside" x="10" y="60" width="190" height="84" rx="8"/>
+      <text class="m" x="22" y="86">flume scan</text>
+      <text class="m" x="22" y="104">  | flume submit</text>
+      <text class="s" x="22" y="128">findings, one per line</text>
+      <rect class="later" x="10" y="160" width="190" height="52" rx="8"/>
+      <text class="todo" x="22" y="182">run by the server's clock</text>
+      <text class="s" x="22" y="200">today: by hand</text>
+      <path class="edge" d="M200,102 L263,102"/>
+
+      <!-- server -->
+      <rect class="server" x="250" y="40" width="290" height="270" rx="12"/>
+      <text class="m" x="264" y="64">flume serve</text>
+      <rect class="mech" x="265" y="80" width="78" height="44" rx="8"/>
+      <text class="t" x="304" y="107" text-anchor="middle">Accept</text>
+      <path class="edge" d="M343,102 L357,102"/>
+      <rect class="mech" x="359" y="80" width="70" height="44" rx="8"/>
+      <text class="t" x="394" y="107" text-anchor="middle">queue</text>
+      <path class="edge" d="M429,102 L443,102"/>
+      <rect class="mech" x="445" y="80" width="82" height="44" rx="8"/>
+      <text class="t" x="486" y="100" text-anchor="middle">who starts</text>
+      <text class="t" x="486" y="116" text-anchor="middle">what</text>
+      <rect class="mech" x="265" y="140" width="262" height="40" rx="8"/>
+      <text class="s" x="277" y="165">one SQLite file: the units and the record</text>
+      <rect class="later" x="265" y="196" width="262" height="100" rx="8"/>
+      <text class="todo" x="277" y="216">limits: machine, allowance, waiting PRs</text>
+      <text class="todo" x="277" y="235">routing: a unit needs, a node offers</text>
+      <text class="todo" x="277" y="254">leases, alerts, a login for nodes</text>
+      <text class="todo" x="277" y="273">by hand: -now, and pause to make room</text>
+
+      <!-- nodes -->
+      <rect class="outside" x="690" y="40" width="300" height="104" rx="8"/>
+      <text class="t" x="702" y="64">Node on the server's machine</text>
+      <text class="s" x="702" y="84">Linux: control plane and node</text>
+      <text class="s" x="702" y="104">agent provider: T3 Code</text>
+      <text class="s" x="702" y="124">project folders and worktrees</text>
+
+      <rect class="outside" x="690" y="176" width="300" height="104" rx="8"/>
+      <text class="t" x="702" y="200">Node on the Mac</text>
+      <text class="m" x="702" y="220">flume node</text>
+      <text class="s" x="702" y="240">agent provider: T3 Code</text>
+      <text class="todo" x="702" y="260">offers: macos, ios, simulator</text>
+
+      <!-- the line -->
+      <path class="edge" d="M690,78 L542,78"/>
+      <text class="e" x="616" y="70" text-anchor="middle">asks, reports</text>
+      <path class="edge" d="M540,110 L688,110"/>
+      <text class="e" x="616" y="128" text-anchor="middle">the whole picture</text>
+      <path class="edge" d="M690,214 L542,214"/>
+      <text class="e" x="616" y="206" text-anchor="middle">asks, reports</text>
+      <path class="edge" d="M540,246 L688,246"/>
+      <text class="e" x="616" y="264" text-anchor="middle">the whole picture</text>
+
+      <!-- agent and GitHub -->
+      <rect class="mech" x="690" y="318" width="300" height="60" rx="8"/>
+      <text class="t" x="702" y="342">Agent, in its worktree</text>
+      <text class="m" x="702" y="362">flume prepare · push · pr</text>
+      <path class="edge" d="M690,348 L395,348 L395,312"/>
+      <text class="e" x="545" y="340" text-anchor="middle">may this branch publish?</text>
+      <path class="edge" d="M840,280 L840,316"/>
+      <text class="e" x="850" y="302">a node starts it</text>
+
+      <rect class="outside" x="690" y="410" width="300" height="46" rx="8"/>
+      <text class="t" x="702" y="431">GitHub</text>
+      <text class="s" x="702" y="448">the unit's branch and its pull request</text>
+      <path class="edge" d="M840,378 L840,408"/>
+      <text class="hum" x="880" y="431">a human merges</text>
+
+      <text class="s" x="10" y="250">The node dials out.</text>
+      <text class="s" x="10" y="268">The server never calls</text>
+      <text class="s" x="10" y="286">a node, and holds each</text>
+      <text class="s" x="10" y="304">question open until</text>
+      <text class="s" x="10" y="322">something changes.</text>
+    </svg>
+  </section>
+
+  <section>
+    <h2>A unit's life</h2>
+    <svg viewBox="0 0 1000 250" role="img" aria-label="A unit is queued, starting, running, then landing. A failed start sends it back to the queue with a growing wait, and after six hours to dead letters. New input brings it back.">
+      <text class="e" x="14" y="86">Accept</text>
+      <path class="edge" d="M62,92 L108,92"/>
+
+      <rect class="mech" x="110" y="70" width="130" height="44" rx="8"/>
+      <text class="t" x="175" y="97" text-anchor="middle">queued</text>
+      <path class="edge" d="M240,92 L288,92"/>
+      <rect class="mech" x="290" y="70" width="130" height="44" rx="8"/>
+      <text class="t" x="355" y="97" text-anchor="middle">starting</text>
+      <path class="edge" d="M420,92 L468,92"/>
+      <rect class="mech" x="470" y="70" width="130" height="44" rx="8"/>
+      <text class="t" x="535" y="97" text-anchor="middle">running</text>
+      <path class="edge" d="M600,92 L648,92"/>
+      <rect class="mech" x="650" y="70" width="130" height="44" rx="8"/>
+      <text class="t" x="715" y="97" text-anchor="middle">landing</text>
+
+      <text class="s" x="355" y="62" text-anchor="middle">on a node</text>
+      <text class="s" x="535" y="62" text-anchor="middle">the agent works</text>
+      <text class="s" x="715" y="62" text-anchor="middle">a PR is open</text>
+
+      <path class="edge later-edge" d="M780,82 L848,62"/>
+      <path class="edge later-edge" d="M780,102 L848,122"/>
+      <rect class="later" x="850" y="40" width="130" height="40" rx="8"/>
+      <text class="t" x="915" y="65" text-anchor="middle">landed</text>
+      <rect class="later" x="850" y="104" width="130" height="40" rx="8"/>
+      <text class="t" x="915" y="129" text-anchor="middle">rejected</text>
+      <text class="hum" x="915" y="96" text-anchor="middle">a human</text>
+
+      <!-- failed start -->
+      <path class="edge" d="M355,114 L355,160 L175,160 L175,116"/>
+      <text class="e" x="265" y="152" text-anchor="middle">start failed</text>
+      <text class="s" x="265" y="178" text-anchor="middle">wait 2 min, then twice as long, up to 1 h</text>
+      <path class="edge" d="M400,114 L400,196 L468,196"/>
+      <rect class="exit" x="470" y="176" width="130" height="40" rx="8"/>
+      <text class="t" x="535" y="201" text-anchor="middle">dead-letter</text>
+      <text class="s" x="612" y="201">still failing 6 h after the first failure</text>
+
+      <!-- new input -->
+      <path class="edge" d="M770,70 L770,22 L175,22 L175,68"/>
+      <text class="e" x="472" y="14" text-anchor="middle">new input brings a unit back, also from landed, rejected and dead-letter</text>
+
+      <text class="todo" x="110" y="240">Decided, not built: a pause by hand or a lease that ran out puts a running unit back in the queue.</text>
+    </svg>
+  </section>
+
+  <section>
+    <h2>Who starts what</h2>
+    <table>
+      <tr><th>The server asks</th><th>The rule</th><th></th></tr>
+      <tr><td class="q" rowspan="2">Which unit is next?</td><td>The heaviest, then the one that waited longest.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>A unit started by hand with <code>-now</code> goes first.</td><td><span class="tag todo">decided</span></td></tr>
+      <tr><td class="q" rowspan="4">Does the node have room?</td><td>Fewer units than its ceiling, <code>-max-running</code>.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>The machine is not busy: load per core and memory pressure.</td><td><span class="tag todo">decided</span></td></tr>
+      <tr><td>The account has allowance left, by the <code>usage</code> tool. A thread that was stopped by a limit counts for more than a percentage.</td><td><span class="tag todo">decided</span></td></tr>
+      <tr><td>Not too many pull requests wait for a human.</td><td><span class="tag todo">decided</span></td></tr>
+      <tr><td class="q" rowspan="4">Can the node run it?</td><td>It has the unit's project.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>The unit's instance is not paused there.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>A unit that ran before goes back to the node that has its session.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>The node offers what the unit needs, such as <code>ios</code>. General work goes to the plainer node first.</td><td><span class="tag todo">decided</span></td></tr>
+      <tr><td class="q" rowspan="2">What if the start fails?</td><td>The unit waits and the units behind it start. After 6 hours it becomes a dead letter.</td><td><span class="tag built">built</span></td></tr>
+      <tr><td>A dead letter alerts a human, through the channels its vessel instance names. A GitHub issue is the first channel.</td><td><span class="tag todo">decided</span></td></tr>
+    </table>
+    <p class="sub">The lowest limit wins. A cloud node is not planned for now.</p>
+  </section>
+</div>
+</body>
+</html>
