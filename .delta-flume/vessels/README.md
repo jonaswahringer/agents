@@ -6,10 +6,19 @@ This project runs [delta-flume](https://github.com/jonaswahringer/delta-flume) v
 
 | Instance | Trigger | Runs on |
 |---|---|---|
-| [maintenance/work-smart-not-hard-skill](maintenance/work-smart-not-hard-skill.md) | weekly, Sunday 05:00 | T3 scheduled task, Mac mini |
-| [maintenance/external-skills](maintenance/external-skills.md) | weekly | T3 scheduled task, Mac mini |
-| [maintenance/dependencies](maintenance/dependencies.md) | weekly | T3 scheduled task, Mac mini |
-| [maintenance/docs](maintenance/docs.md) | monthly | T3 scheduled task, Mac mini |
+| [maintenance/work-smart-not-hard-skill](maintenance/work-smart-not-hard-skill.md) | every Sunday at 05:00 | T3 scheduled task, Mac mini |
+| [maintenance/external-skills](maintenance/external-skills.md) | every Monday at 05:00 | T3 scheduled task, Mac mini |
+| [maintenance/dependencies](maintenance/dependencies.md) | every Tuesday at 05:00 | T3 scheduled task, Mac mini |
+| [maintenance/docs](maintenance/docs.md) | every 4 weeks | T3 scheduled task, Mac mini |
+
+## Run
+
+```
+Run vessel instance {type}/{instance} in jonaswahringer/agents.
+Read from origin/main: .delta-flume/vessels/{type}/{instance}.md,
+.delta-flume/vessels/README.md, AGENTS.md and frameworks/delta-flume/vessels/{type}.md.
+If its status is paused, stop and report that. Otherwise follow them. Never merge.
+```
 
 ## Secrets
 
@@ -22,15 +31,7 @@ Never give an agent: `POSTPLAN_BOOTSTRAP_API_KEY` from `tools/comms/.env` or `to
 
 ## Every instance
 
-Each instance has one T3 scheduled task with this prompt:
-
-```
-Run vessel instance maintenance/<instance> in jonaswahringer/agents.
-Read from origin/main: .delta-flume/vessels/maintenance/<instance>.md,
-.delta-flume/vessels/README.md, AGENTS.md and frameworks/delta-flume/vessels/maintenance.md.
-If its status is paused, stop and report that. Otherwise follow them. Never merge.
-```
-
+- Each instance has one T3 scheduled task, made from Instances and Run by step 8 of [setup.md](../../frameworks/delta-flume/setup.md#8-schedule). Change a task there, not in T3; the next Schedule run undoes edits made in T3.
 - `status` in the instance file is the only switch. Disabling a T3 task is an emergency brake, not a pause.
 - Work in a fresh worktree from `origin/main`. The Mac mini's main checkout runs comms, so never work there and never run `git clean -xd` in it.
 - A run may commit, push a branch, and open or update a PR without asking, and links each PR to its T3 thread. It never merges, tags, or pushes to `main`. This replaces the ask-before-commit rule for vessel runs only.

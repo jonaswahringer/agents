@@ -2,10 +2,10 @@
 
 How to add vessels to a project, whether it runs none yet or already has some. An agent does the work and asks a human at two points; a human can follow it alone.
 
-Result: one `<project>/.delta-flume/vessels/<type>/<instance>.md` per instance the human picks, a `.delta-flume/vessels/README.md` that lists them, and the AGENTS.md changes the human approved.
+Result: one `<project>/.delta-flume/vessels/<type>/<instance>.md` per instance the human picks, a `.delta-flume/vessels/README.md` that lists them, and the AGENTS.md changes the human approved. After the merge, each instance gets a trigger in the runtime that runs it.
 
 ```
-Survey ─► Page ─► Round 1: pick ─► Check the how ─► Round 2: decide ─► Write ─► Check ─► Hand off
+Survey ─► Page ─► Round 1: pick ─► Check the how ─► Round 2: decide ─► Write ─► Check ─► Hand off ─► merge ─► Schedule
 ```
 
 ## Before you start
@@ -108,7 +108,8 @@ Done when every instance section and every finding has an answer.
 
 - Each `vessel` names an existing type and matches its instance's folder, and each `status` is `active` or `paused`.
 - No two instances of one type claim the same subject.
-- `.delta-flume/vessels/README.md` lists every instance with its trigger and where it runs, and no placeholder is left.
+- `.delta-flume/vessels/README.md` lists every instance with its trigger and where it runs, and no `<placeholder>` is left. `{type}` and `{instance}` in Run stay.
+- Every Trigger is a schedule that the runtime in Runs on takes as written.
 - Every command, script and path in AGENTS.md and `.delta-flume/vessels/README.md` exists.
 - Neither file holds a secret value.
 - Each override changes policy that exists in its type file.
@@ -117,4 +118,20 @@ Report what passed, what failed, and what you couldn't check.
 
 ## 7. Hand off
 
-Show the diff. Ask before committing, and follow the project's commit conventions.
+Show the diff. Ask before committing, and follow the project's commit conventions. Schedule waits until the change is merged.
+
+## 8. Schedule
+
+After the merge, give each instance a trigger in the runtime its Runs on names. Not before: the prompt reads the files from the main branch.
+
+1. Read Instances and Run in `.delta-flume/vessels/README.md` on the main branch.
+2. List the triggers that already exist in that runtime. An instance's trigger is titled `<project> vessel <type>/<instance>`.
+3. Plan one action per instance: create, update what differs, or nothing. Take every field from the files: that title, the prompt in Run with `{type}` and `{instance}` filled in, and the schedule in Trigger. Never write or adjust a field yourself. If the runtime can't take a Trigger as written, ask the human to change the row first.
+4. Turn every trigger on, even a paused instance's: `status` stays the only switch, and a paused run stops at once.
+5. List the triggers that run a vessel but match no instance, such as one made by hand before setup. For each, ask: take it over for an instance, keep it, or delete it.
+6. Ask about each instance's action, showing its fields. Apply only what the human approved.
+7. List the triggers again, compare each with the plan, and report each one's next run.
+
+Run this step again whenever Instances or Run changes. It changes only what differs, and so also undoes edits made by hand in the runtime.
+
+If the runtime has no tool to create triggers, give the human each trigger's fields to enter.

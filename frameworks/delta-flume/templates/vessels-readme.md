@@ -10,7 +10,18 @@ This project runs [delta-flume](https://github.com/jonaswahringer/delta-flume) v
 
 | Instance | Trigger | Runs on |
 |---|---|---|
-| [<type>/<instance>](<type>/<instance>.md) | <schedule or event, for example weekly on Monday> | <machine and runtime, for example a scheduled task on the build server> |
+| [<type>/<instance>](<type>/<instance>.md) | <schedule the runtime takes as written, for example every Monday at 06:00> | <machine and runtime, for example a scheduled task on the build server> |
+
+## Run
+
+<!-- The prompt every instance's trigger runs. Setup copies it into each trigger and fills in {type} and {instance}, so keep those two as they are. It only points to files on the main branch, so editing those files changes the next run without touching a trigger. -->
+
+```
+Run vessel instance {type}/{instance} in <repository, for example owner/name>.
+Read from <main branch, for example origin/main>: .delta-flume/vessels/{type}/{instance}.md,
+.delta-flume/vessels/README.md, AGENTS.md and https://github.com/jonaswahringer/delta-flume/blob/main/vessels/{type}.md.
+If its status is paused, stop and report that. Otherwise follow them. Never merge.
+```
 
 ## Secrets
 
