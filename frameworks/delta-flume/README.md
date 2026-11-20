@@ -108,7 +108,6 @@ The project keeps the what apart from the how.
 
 ```
 <project>/
-  README.md                links .delta-flume/vessels/README.md
   AGENTS.md                how, for every agent in the project
   .delta-flume/
     vessels/
@@ -120,7 +119,7 @@ The project keeps the what apart from the how.
         snapshot-tests.md
 ```
 
-Everything delta-flume keeps in a project lives in `.delta-flume/`. The dot hides the folder from file listings, so the project's README links `.delta-flume/vessels/README.md` in one line.
+Everything delta-flume keeps in a project lives in `.delta-flume/`.
 
 | File | Holds | Layer |
 |---|---|---|

@@ -79,15 +79,13 @@ Done when every instance section and every finding has an answer.
 
 1. Copy [templates/instance.md](templates/instance.md) to `<project>/.delta-flume/vessels/<type>/<instance>.md`, fill it from the answers, and remove the comments.
 2. If `<project>/.delta-flume/vessels/README.md` doesn't exist, copy [templates/vessels-readme.md](templates/vessels-readme.md) there, replace its placeholders and remove the comments. Add the new instance to Instances, with its trigger and where it runs.
-3. If the project's README doesn't link `.delta-flume/vessels/README.md`, add one line that does. The dot hides the folder from file listings, so the link is how people find it.
-4. Apply the approved changes to AGENTS.md and `.delta-flume/vessels/README.md`. Change nothing beyond these steps. Keep each file's existing structure and voice.
+3. Apply the approved changes to AGENTS.md and `.delta-flume/vessels/README.md` and nothing else. Keep each file's existing structure and voice.
 
 ## 5. Check
 
 - `vessel` names an existing type and matches the instance's folder, and `status` is `active` or `paused`.
 - The scope claims no subject that another instance of the same type covers.
 - `.delta-flume/vessels/README.md` lists the instance with its trigger and where it runs, and no placeholder is left.
-- The project's README links `.delta-flume/vessels/README.md`.
 - Every command, script and path in AGENTS.md and `.delta-flume/vessels/README.md` exists.
 - Neither file holds a secret value.
 - Each override changes policy that exists in the type file.
