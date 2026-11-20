@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Runs the installer suite, tool suites, and skill-owned scripts/test.sh suites.
+# Runs the installer suite, tool suites, skill-owned scripts/test.sh suites, and
+# every Go module in a framework's src/ folder or under tools/.
 # Suites are found on disk, so a new tool with tests needs no change here.
 # PYTHON picks the interpreter, e.g. PYTHON=/usr/bin/python3 to check 3.9.
 
@@ -59,6 +60,22 @@ for tool in "$ROOT"/tools/*/; do
       SKIPPED="$SKIPPED
   $name (Bun is not installed)"
     fi
+  fi
+done
+
+go_suite() (
+  cd "$1" || exit 1
+  go vet ./... && go test ./...
+)
+
+for mod in "$ROOT"/frameworks/*/src/go.mod "$ROOT"/tools/*/go.mod; do
+  [[ -f "$mod" ]] || continue
+  dir="${mod%/go.mod}"
+  if command -v go >/dev/null 2>&1; then
+    suite "${dir#"$ROOT"/} (Go)" go_suite "$dir"
+  else
+    SKIPPED="$SKIPPED
+  ${dir#"$ROOT"/} (Go is not installed)"
   fi
 done
 
