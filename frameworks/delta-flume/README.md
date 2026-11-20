@@ -108,27 +108,31 @@ The project keeps the what apart from the how.
 
 ```
 <project>/
+  README.md                links .delta-flume/vessels/README.md
   AGENTS.md                how, for every agent in the project
-  vessels/
-    README.md              how, only for vessels
-    maintenance/
-      dependencies.md      what, for one instance
-      docs.md
-    testing/
-      snapshot-tests.md
+  .delta-flume/
+    vessels/
+      README.md            how, only for vessels
+      maintenance/
+        dependencies.md    what, for one instance
+        docs.md
+      testing/
+        snapshot-tests.md
 ```
+
+Everything delta-flume keeps in a project lives in `.delta-flume/`. The dot hides the folder from file listings, so the project's README links `.delta-flume/vessels/README.md` in one line.
 
 | File | Holds | Layer |
 |---|---|---|
-| `vessels/<type>/<instance>.md` | the vessel type, active or paused, what the instance does here, its scope, and any policy overrides | purpose, policy |
-| `vessels/README.md` | the project's instances with each one's trigger and where it runs, and the how that only vessels need: an instance's commands and procedures, and the env vars and secrets: their names and where each comes from, never the values | mechanism |
+| `.delta-flume/vessels/<type>/<instance>.md` | the vessel type, active or paused, what the instance does here, its scope, and any policy overrides | purpose, policy |
+| `.delta-flume/vessels/README.md` | the project's instances with each one's trigger and where it runs, and the how that only vessels need: an instance's commands and procedures, and the env vars and secrets: their names and where each comes from, never the values | mechanism |
 | `AGENTS.md` | the how that every agent in the project needs: the commands to build and test, the runtime check, and off-limits files | mechanism |
 
-If any agent working in the project needs it, it goes in AGENTS.md. If only a vessel needs it, it goes in `vessels/README.md`. Neither repeats the other, so AGENTS.md stays small.
+If any agent working in the project needs it, it goes in AGENTS.md. If only a vessel needs it, it goes in `.delta-flume/vessels/README.md`. Neither repeats the other, so AGENTS.md stays small.
 
 Name an instance after what it keeps, such as `dependencies` or `docs`, not after an action; the type already says what is done. The name goes into each unit's key. Instances of one type never claim the same subject, so every unit has one owner. They may share a file when each keeps a different part of it, such as the version lines in a README and the rest of its text.
 
-The instance's `vessel` field names a type in [vessels/](vessels/) and matches its folder. The agent loop gets the type file, the instance file, the project's `vessels/README.md` and its AGENTS.md. Agents load AGENTS.md on their own; the mechanism hands over the rest.
+The instance's `vessel` field names a type in [vessels/](vessels/) and matches its folder. The agent loop gets the type file, the instance file, the project's `.delta-flume/vessels/README.md` and its AGENTS.md. Agents load AGENTS.md on their own; the mechanism hands over the rest.
 
 To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 
@@ -144,7 +148,7 @@ To set up a vessel in a project, follow [new-instance.md](new-instance.md).
 | [templates/vessel.md](templates/vessel.md) | Template for a new vessel type. |
 | [new-instance.md](new-instance.md) | Steps to set up a vessel instance in a project. |
 | [templates/instance.md](templates/instance.md) | Template for one vessel instance in a project. new-instance.md fills it. |
-| [templates/vessels-readme.md](templates/vessels-readme.md) | Template for a project's `vessels/README.md`. |
+| [templates/vessels-readme.md](templates/vessels-readme.md) | Template for a project's `.delta-flume/vessels/README.md`. |
 | [LICENSE](LICENSE) | MIT. |
 
 ## Open
