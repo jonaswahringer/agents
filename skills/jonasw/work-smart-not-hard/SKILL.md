@@ -16,7 +16,7 @@ The task role determines the provider owner.
 | Task role | Lead | Authors and children |
 |---|---|---|
 | Code intended to merge, including frontend and UI/UX | Claude Opus 5.5; Fable 5.2 only when explicitly chosen | Claude Sonnet 5.5 authors. Lightweight children may use Haiku 5.5 when available, GPT-6 Luna at low–medium, or GPT-6.1 Sol at low. |
-| Investigation, review, verification, or GPT-led orchestration | GPT-6 Astra | Claude Sonnet 5.5 authors mergeable edits. GPT-6.1 Sol or Astra children handle investigation, review, and verification. GPT lightweight children may inventory files and extract supplied facts only. |
+| Investigation, review, verification, or GPT-led orchestration | GPT-6 Astra | Claude Sonnet 5.5 authors mergeable edits. GPT-6.2 Sol, GPT-6.1 Sol, or Astra children handle investigation, review, and verification. GPT lightweight children may inventory files and extract supplied facts only. |
 
 Claude-led orchestration uses Opus 5.5, or explicitly chosen Fable 5.2, with Sonnet 5.5 authors and lightweight children. GPT-led orchestration uses GPT-6 Astra with Sonnet 5.5 authors and GPT investigation, review, and verification children. GPT children do not author mergeable edits unless an explicit, narrowly scoped emergency exception permits crossing the provider boundary.
 
@@ -24,7 +24,7 @@ Choose effort separately for the lead and every child. Use low for mechanical in
 
 ## Approved models and controls
 
-The T3 Claude runtime catalog was checked on 2026-11-15. It confirms the IDs and effort controls for Opus 5.5, Sonnet 5.5, Fable 5.2, and Haiku 5.5. The GPT IDs below retain the prior runtime check from 2026-10-25 because this catalog query did not return Codex model entries. IDs are runtime IDs, not entitlement claims.
+The T3 Claude runtime catalog was checked on 2026-11-15. It confirms the IDs and effort controls for Opus 5.5, Sonnet 5.5, Fable 5.2, and Haiku 5.5. A live T3 catalog check on 2026-11-22 confirms `gpt-6.2-sol` and `gpt-6.1-terra` at low through ultra, alongside the existing entries. IDs are runtime IDs, not entitlement claims.
 
 | Model | Runtime ID | Allowed effort | Role |
 |---|---|---|---|
@@ -32,6 +32,7 @@ The T3 Claude runtime catalog was checked on 2026-11-15. It confirms the IDs and
 | Claude Sonnet 5.5 | `claude-sonnet-5-5` | low–max | Claude code author |
 | Claude Fable 5.2 | `claude-fable-5-2` | low–high only | Explicitly chosen taste/design lead |
 | GPT-6 Astra | `gpt-6-astra` | low–ultra | GPT lead and orchestration |
+| GPT-6.2 Sol | `gpt-6.2-sol` | low–ultra | GPT investigation, review, verification |
 | GPT-6.1 Sol | `gpt-6.1-sol` | low–ultra | GPT investigation, review, verification; lightweight child at low |
 | GPT-6 Luna | `gpt-6-luna` | low–max | Lightweight inventory and extraction at low–medium |
 | Claude Haiku 5.5 | `claude-haiku-5-5` | low–max | Lightweight child when available |
@@ -43,7 +44,7 @@ The current T3 runtime catalog exposes Haiku 5.5 and its low–max effort contro
 Never select these as a parent, child, or fallback:
 
 - Claude Haiku 4.5, including any older Haiku substituted for Haiku 5.5
-- All Terra models, including GPT-5.6 Terra and GPT-6.1 Terra
+- All Terra models, including GPT-5.6 Terra, except GPT-6.1 Terra, which is not blacklisted
 - Every Grok model, including Grok 4.7 and Grok Code 4.5
 
 ## Reasoning effort
