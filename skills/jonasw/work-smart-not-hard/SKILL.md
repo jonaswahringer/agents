@@ -44,7 +44,7 @@ The current T3 runtime catalog exposes Haiku 5.5 and its low–max effort contro
 Never select these as a parent, child, or fallback:
 
 - Claude Haiku 4.5, including any older Haiku substituted for Haiku 5.5
-- All Terra models, including GPT-5.6 Terra, except GPT-6.1 Terra, which is not blacklisted
+- GPT 5.6 Terra
 - Every Grok model, including Grok 4.7 and Grok Code 4.5
 
 ## Reasoning effort
