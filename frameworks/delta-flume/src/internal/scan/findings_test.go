@@ -104,7 +104,6 @@ func TestFindingsMergeLockfiles(t *testing.T) {
 	want := []Finding{{
 		Key:       "maintenance/tiro/dependencies/@scope/pkg",
 		Weight:    unit.Low,
-		Root:      "/work/tiro",
 		Package:   "@scope/pkg",
 		Ecosystem: "npm",
 		Versions:  []string{"0.9.0", "1.0.0"},

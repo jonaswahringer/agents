@@ -76,8 +76,8 @@ func outcomes(counts map[gateway.Outcome]int) string {
 }
 
 // readSubmissions reads one unit per line. Each is a JSON object with a key
-// and a weight, such as a line of "flume scan". The object without its root
-// is the unit's content.
+// and a weight. The whole object is the unit's content, and flume reads
+// nothing else in it.
 func readSubmissions(stdin io.Reader) ([]gateway.Submission, error) {
 	var submissions []gateway.Submission
 	seen := map[string]int{}
@@ -107,23 +107,9 @@ func readSubmissions(stdin io.Reader) ([]gateway.Submission, error) {
 			return nil, fmt.Errorf("line %d: key %s is already on line %d", n, head.Key, first)
 		}
 		seen[head.Key] = n
-		content, err := withoutRoot(line)
-		if err != nil {
-			return nil, fmt.Errorf("line %d: %w", n, err)
-		}
+		// The scanner reuses its buffer for the next line.
+		content := append(json.RawMessage(nil), line...)
 		submissions = append(submissions, gateway.Submission{Key: key, Weight: weight, Content: content})
 	}
 	return submissions, lines.Err()
-}
-
-// withoutRoot is a unit's line without its root. Where a project lives on
-// one machine is not part of what was found: the same finding from another
-// folder, or another machine, is the same unit and brings nothing new.
-func withoutRoot(line []byte) (json.RawMessage, error) {
-	var object map[string]json.RawMessage
-	if err := json.Unmarshal(line, &object); err != nil {
-		return nil, err
-	}
-	delete(object, "root")
-	return json.Marshal(object)
 }

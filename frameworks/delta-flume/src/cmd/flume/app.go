@@ -37,7 +37,7 @@ type command struct {
 	run     func(a app, ctx context.Context, c command, args []string) int
 }
 
-// synopsis is how the command is called, such as "flume scan [flags] [dir]".
+// synopsis is how the command is called, such as "flume node [flags] <project>...".
 func (c command) synopsis() string {
 	return strings.TrimSpace("flume " + c.name + " " + c.args)
 }

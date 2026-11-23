@@ -89,7 +89,7 @@ func starting(t *testing.T, key string) unit.Unit {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return unit.Unit{Key: k, Weight: unit.High, State: unit.Starting, Node: "mini", Content: []byte(`{"advisories":["GHSA-1"]}`)}
+	return unit.Unit{Key: k, Weight: unit.High, State: unit.Starting, Node: "mini", Content: []byte(`{"input":["one"]}`)}
 }
 
 type fixture struct {
@@ -122,7 +122,7 @@ func TestANodeStartsWhatItIsToldToStart(t *testing.T) {
 		t.Fatalf("%d agents were started, want 1", len(f.agents.jobs))
 	}
 	got := f.agents.jobs[0]
-	if !strings.Contains(got.Message, `"GHSA-1"`) || !strings.Contains(got.Message, "Unit:   maintenance/tiro/dependencies/lodash") {
+	if !strings.Contains(got.Message, `"one"`) || !strings.Contains(got.Message, "Unit:   maintenance/tiro/dependencies/lodash") {
 		t.Errorf("the agent's message:\n%s", got.Message)
 	}
 	if got.Message = ""; got != want {

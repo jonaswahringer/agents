@@ -102,17 +102,17 @@ const lodash = "maintenance/tiro/dependencies/lodash"
 func TestAcceptByKey(t *testing.T) {
 	f := newFixture(t)
 
-	if d := f.accept(t, lodash, unit.High, `{"advisories": ["A"]}`); d.Outcome != gateway.Accepted || d.Key != lodash {
+	if d := f.accept(t, lodash, unit.High, `{"input": ["A"]}`); d.Outcome != gateway.Accepted || d.Key != lodash {
 		t.Fatalf("a new unit: %+v, want accepted", d)
 	}
 	// The same content again, written differently, is still the same input.
-	if d := f.accept(t, lodash, unit.High, `{ "advisories":["A"] }`); d.Outcome != gateway.Declined {
+	if d := f.accept(t, lodash, unit.High, `{ "input":["A"] }`); d.Outcome != gateway.Declined {
 		t.Errorf("the same input again: %+v, want declined", d)
 	}
-	if d := f.accept(t, lodash, unit.Critical, `{"advisories": ["A", "B"]}`); d.Outcome != gateway.Updated {
+	if d := f.accept(t, lodash, unit.Critical, `{"input": ["A", "B"]}`); d.Outcome != gateway.Updated {
 		t.Errorf("new input while queued: %+v, want updated", d)
 	}
-	if units, _ := f.Queue(ctx); len(units) != 1 || units[0].Weight != unit.Critical || string(units[0].Content) != `{"advisories":["A","B"]}` {
+	if units, _ := f.Queue(ctx); len(units) != 1 || units[0].Weight != unit.Critical || string(units[0].Content) != `{"input":["A","B"]}` {
 		t.Errorf("queue after the update = %+v, want one critical unit with the new content", units)
 	}
 }

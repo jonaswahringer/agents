@@ -17,16 +17,13 @@ import (
 // advisory against an installed version. The key leaves out the version, so
 // every advisory for a dependency lands in the same finding and the same PR.
 type Finding struct {
-	Key    string      `json:"key"`
-	Weight unit.Weight `json:"weight"`
-	// Root is the folder that was scanned: where the project lives on this
-	// machine, so the unit can be started there.
-	Root       string     `json:"root"`
-	Package    string     `json:"package"`
-	Ecosystem  string     `json:"ecosystem"`
-	Versions   []string   `json:"versions"`
-	Sources    []string   `json:"sources"`
-	Advisories []Advisory `json:"advisories"`
+	Key        string      `json:"key"`
+	Weight     unit.Weight `json:"weight"`
+	Package    string      `json:"package"`
+	Ecosystem  string      `json:"ecosystem"`
+	Versions   []string    `json:"versions"`
+	Sources    []string    `json:"sources"`
+	Advisories []Advisory  `json:"advisories"`
 }
 
 // Advisory is one vulnerability, however many databases list it.
@@ -242,7 +239,6 @@ func Findings(reportJSON []byte, project, instance, root string) ([]Finding, err
 		}
 		f := Finding{
 			Key:       key.String(),
-			Root:      root,
 			Package:   id.name,
 			Ecosystem: id.ecosystem,
 			Versions:  e.versions.sorted(),

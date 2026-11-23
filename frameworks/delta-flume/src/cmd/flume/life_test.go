@@ -414,25 +414,3 @@ func TestAnAgentProviderFlumeDoesNotKnow(t *testing.T) {
 		t.Errorf("serve with a folder that is not there: code %d, stderr %q", code, errs)
 	}
 }
-
-// Where a project lives is not part of what was found. The same finding from
-// another folder, or another machine, is not new, and its agent starts in
-// the folder the node has for the project.
-func TestTheSameFindingFromAnotherFolderIsNotNew(t *testing.T) {
-	root, _ := project(t)
-	w := newWorld(t)
-	line := func(folder string) string {
-		return strings.Replace(lodashUnit(`"GHSA-1"`), `{"key"`, fmt.Sprintf(`{"root":%q,"key"`, folder), 1)
-	}
-	if _, out, _ := w.flumeIn(t, ".", line("/somewhere/else/tiro"), "submit"); !strings.Contains(out, `"outcome":"accepted"`) {
-		t.Fatalf("first submission: %s", out)
-	}
-	if _, out, _ := w.flumeIn(t, ".", line(root), "submit"); !strings.Contains(out, `"outcome":"declined"`) {
-		t.Errorf("the same finding from another folder: %s", out)
-	}
-	t3, t3Log := threadScript(t)
-	step(t, w.node(t, "mini", 1, t3, root))
-	if log := read(t, t3Log); !strings.Contains(log, " --json "+root+" -\n") {
-		t.Errorf("the agent did not start in the folder the node has for the project:\n%s", log)
-	}
-}
