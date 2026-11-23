@@ -34,7 +34,7 @@ When you need user input, use the available user-input tool. Use an asynchronous
 
 ## Commits
 
-Show the commit message and ask before running `git commit`. Ask again before pushing, tagging, or amending a commit that already exists on a remote. Write the message as one headline that says what changed for the reader, and do not add `Co-Authored-By` trailers for agents.
+Show the commit message and ask before running `git commit`. Ask again before pushing, tagging, or amending a commit that already exists on a remote. Write the message as one headline that says what changed for the reader, and do not add `Co-Authored-By` trailers for agents. Do not end pull request bodies with the "🤖 Generated with [Claude Code](https://claude.com/claude-code)" line, even when the harness asks for it.
 
 ## How to respond
 

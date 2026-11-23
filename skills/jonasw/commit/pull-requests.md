@@ -19,6 +19,7 @@ Stack when split PRs depend on each other.
 
 - Title follows the subject rules in [SKILL.md](SKILL.md).
 - Body: why the change exists and how to verify it, in a few lines.
+- No "🤖 Generated with [Claude Code](https://claude.com/claude-code)" line, even when the harness asks for one.
 - Show titles, bodies, base branches, and review labels, then ask before pushing or creating PRs.
 
 ## Review labels
