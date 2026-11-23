@@ -49,12 +49,18 @@ type Node struct {
 	// Quiet leaves out the starts and failed starts, which the server logs
 	// too. It is for a node that shares its log with the server.
 	Quiet bool
+	// Now is the node's clock. Nil means the machine's.
+	Now func() time.Time
 
 	// seen is the version of the server's last answer.
 	seen int64
 	// unreported holds sessions the node started and could not report, so
 	// it does not start them twice.
 	unreported map[unit.Key]string
+	// running is the session of each unit the server last said runs here.
+	running map[unit.Key]string
+	// repos is each project's repository on GitHub, read once.
+	repos map[string]string
 }
 
 // Run works until ctx ends. When the server does not answer, it tries
@@ -84,13 +90,19 @@ func (n *Node) Run(ctx context.Context) {
 // Step asks the server once, letting it hold the question for wait, and
 // starts every unit the answer says to start.
 func (n *Node) Step(ctx context.Context, wait time.Duration) error {
-	report, err := n.report(wait)
+	report, err := n.report(ctx, wait)
 	if err != nil {
 		return err
 	}
 	desired, err := n.Server.Sync(ctx, report)
 	if err != nil {
 		return err
+	}
+	n.running = map[unit.Key]string{}
+	for _, u := range desired.Units {
+		if u.State == unit.Running {
+			n.running[u.Key] = u.Session
+		}
 	}
 	for _, u := range desired.Units {
 		if u.State != unit.Starting {
@@ -107,39 +119,87 @@ func (n *Node) Step(ctx context.Context, wait time.Duration) error {
 	return nil
 }
 
-// report is what the node tells the server about itself.
-func (n *Node) report(wait time.Duration) (wire.Report, error) {
+// report is what the node tells the server about itself: its projects, and
+// what it sees of the sessions it runs.
+func (n *Node) report(ctx context.Context, wait time.Duration) (wire.Report, error) {
 	report := wire.Report{Node: n.Name, MaxRunning: n.MaxRunning, Seen: n.seen, WaitSeconds: int(wait / time.Second)}
 	for name, root := range n.Projects {
-		paused, err := pausedInstances(root)
+		project, err := readProject(root)
 		if err != nil {
 			return wire.Report{}, fmt.Errorf("project %s: %w", name, err)
 		}
-		report.Projects = append(report.Projects, wire.Project{Name: name, Paused: paused})
+		project.Name, project.Repo = name, n.repo(ctx, name, root)
+		report.Projects = append(report.Projects, project)
 	}
 	sort.Slice(report.Projects, func(i, j int) bool { return report.Projects[i].Name < report.Projects[j].Name })
+	report.Sessions = n.look(ctx)
 	return report, nil
 }
 
-// pausedInstances names the vessel instances a project has paused, each as
-// <vessel>/<instance>: the instance files that say so.
-func pausedInstances(root string) ([]string, error) {
+// look says what the node sees of the session of each unit it runs.
+func (n *Node) look(ctx context.Context) []wire.Session {
+	now := time.Now
+	if n.Now != nil {
+		now = n.Now
+	}
+	var sessions []wire.Session
+	for key, session := range n.running {
+		s := wire.Session{Key: key, Session: session}
+		look, err := n.Provider.Look(ctx, session)
+		if err != nil {
+			s.Error = err.Error()
+		} else {
+			s.Busy, s.Asking, s.Status = look.Busy, look.Asking, look.Status
+			s.QuietSeconds = int64(max(now().Sub(look.Changed), 0) / time.Second)
+		}
+		sessions = append(sessions, s)
+	}
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].Key.String() < sessions[j].Key.String() })
+	return sessions
+}
+
+// repo is a project's repository on GitHub, read the first time it is
+// asked for. A project whose origin is not on GitHub has none.
+func (n *Node) repo(ctx context.Context, name, root string) string {
+	if found, ok := n.repos[name]; ok {
+		return found
+	}
+	found, err := (repo.Repo{Dir: root, Git: "git"}).GitHub(ctx)
+	if err != nil {
+		return ""
+	}
+	if n.repos == nil {
+		n.repos = map[string]string{}
+	}
+	n.repos[name] = found
+	return found
+}
+
+// readProject reads a project's instance files: the instances it has
+// paused, and the alert channels each one names.
+func readProject(root string) (wire.Project, error) {
+	var project wire.Project
 	files, err := filepath.Glob(filepath.Join(root, filepath.FromSlash(gateway.InstanceDir), "*", "*.md"))
 	if err != nil {
-		return nil, err
+		return project, err
 	}
-	var paused []string
 	for _, file := range files {
-		vessel, instance := filepath.Base(filepath.Dir(file)), strings.TrimSuffix(filepath.Base(file), ".md")
-		isPaused, err := gateway.Paused(root, vessel, instance)
+		vessel, name := filepath.Base(filepath.Dir(file)), strings.TrimSuffix(filepath.Base(file), ".md")
+		instance, err := gateway.ReadInstance(root, vessel, name)
 		if err != nil {
-			return nil, err
+			return project, err
 		}
-		if isPaused {
-			paused = append(paused, vessel+"/"+instance)
+		if instance.Paused {
+			project.Paused = append(project.Paused, vessel+"/"+name)
+		}
+		if len(instance.Alerts) > 0 {
+			if project.Alerts == nil {
+				project.Alerts = map[string][]string{}
+			}
+			project.Alerts[vessel+"/"+name] = instance.Alerts
 		}
 	}
-	return paused, nil
+	return project, nil
 }
 
 // start starts a unit's agent and tells the server what came of it. The

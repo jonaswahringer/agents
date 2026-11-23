@@ -377,6 +377,10 @@ func (r stoppedRunner) Send(ctx context.Context, session, message string) error 
 	return ctx.Err()
 }
 
+func (r stoppedRunner) Look(ctx context.Context, session string) (agent.Look, error) {
+	return agent.Look{}, ctx.Err()
+}
+
 // Told to stop in the middle of a start, the node still tells the server. A
 // unit left as starting with nobody working on it would never start again.
 func TestAStartThatIsInterruptedPutsTheUnitBack(t *testing.T) {

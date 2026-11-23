@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jonaswahringer/delta-flume/src/internal/agent"
+	"github.com/jonaswahringer/delta-flume/src/internal/alert"
 	"github.com/jonaswahringer/delta-flume/src/internal/node"
 	"github.com/jonaswahringer/delta-flume/src/internal/server"
 	"github.com/jonaswahringer/delta-flume/src/internal/store"
@@ -36,6 +37,7 @@ func (a app) runServe(ctx context.Context, c command, args []string) int {
 	flags := a.flags(c)
 	dbPath := flags.String("db", "", "SQLite file that holds the units (default: $FLUME_DB, else ~/.flume/flume.db)")
 	listen := flags.String("listen", defaultListen, "address to listen on")
+	gh := flags.String("gh", "gh", "gh binary for the github-issue alert channel; it needs a login that may open issues")
 	settings := nodeFlags(flags)
 	// Any number of projects may follow the flags.
 	if exit, ok := parse(flags, args, len(args)); !ok {
@@ -79,7 +81,7 @@ func (a app) runServe(ctx context.Context, c command, args []string) int {
 
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
-	control := server.New(db, a.now, log.printf)
+	control := server.New(db, a.now, log.printf, alertChannels(*gh))
 	web := &http.Server{Handler: control.Handler(), ReadHeaderTimeout: 10 * time.Second}
 	var work, ownNode sync.WaitGroup
 	failed := make(chan error, 1)
@@ -117,6 +119,15 @@ func (a app) runServe(ctx context.Context, c command, args []string) int {
 	}
 	log.printf("stopped")
 	return 0
+}
+
+// alertChannels are the alert channels flume knows, by the name an instance
+// file gives them in "alerts:". A new one is a type that satisfies
+// alert.Channel, and a line here.
+func alertChannels(gh string) map[string]alert.Channel {
+	return map[string]alert.Channel{
+		"github-issue": alert.GitHubIssue{GH: gh},
+	}
 }
 
 // ownAddress is where a program on this machine reaches a listener. A

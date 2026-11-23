@@ -20,7 +20,7 @@ import (
 
 // schemaVersion is stored in the file. A file from a newer flume is refused
 // instead of being read wrongly.
-const schemaVersion = 1
+const schemaVersion = 2
 
 // Times are stored as milliseconds since 1970, UTC. A time that is not set
 // is stored as 0.
@@ -37,6 +37,10 @@ CREATE TABLE units (
   failed_starts INTEGER NOT NULL,
   failing_since INTEGER NOT NULL,
   not_before    INTEGER NOT NULL,
+  weighed_at    INTEGER NOT NULL DEFAULT 0,
+  started_at    INTEGER NOT NULL DEFAULT 0,
+  alive_at      INTEGER NOT NULL DEFAULT 0,
+  asking_since  INTEGER NOT NULL DEFAULT 0,
   queued_at     INTEGER NOT NULL,
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL
@@ -49,6 +53,15 @@ CREATE TABLE events (
   detail TEXT NOT NULL
 );
 `
+
+// upgrades take a file from the version before to the next one: from 1 to
+// 2 is upgrades[0].
+var upgrades = []string{`
+ALTER TABLE units ADD COLUMN weighed_at   INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE units ADD COLUMN started_at   INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE units ADD COLUMN alive_at     INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE units ADD COLUMN asking_since INTEGER NOT NULL DEFAULT 0;
+`}
 
 // DB is an open store.
 type DB struct{ sql *sql.DB }
@@ -89,8 +102,9 @@ func Open(ctx context.Context, path string) (*DB, error) {
 
 func (db *DB) Close() error { return db.sql.Close() }
 
-// migrate creates the tables in a new file. A file that is already current
-// is only read, so a command that lists units never waits for the write lock.
+// migrate creates the tables in a new file, and brings an older file up to
+// date. A file that is already current is only read, so a command that lists
+// units never waits for the write lock.
 func (db *DB) migrate(ctx context.Context) error {
 	version, err := schemaOf(ctx, db.sql)
 	if err != nil || version == schemaVersion {
@@ -107,8 +121,14 @@ func (db *DB) migrate(ctx context.Context) error {
 	if err != nil || version == schemaVersion {
 		return err
 	}
-	if _, err := tx.ExecContext(ctx, schema); err != nil {
-		return err
+	steps := []string{schema}
+	if version > 0 {
+		steps = upgrades[version-1:]
+	}
+	for _, step := range steps {
+		if _, err := tx.ExecContext(ctx, step); err != nil {
+			return err
+		}
 	}
 	if _, err := tx.ExecContext(ctx, fmt.Sprintf("PRAGMA user_version = %d", schemaVersion)); err != nil {
 		return err
@@ -133,7 +153,7 @@ func schemaOf(ctx context.Context, q querier) (int, error) {
 	return version, nil
 }
 
-const unitColumns = "key, weight, state, fingerprint, content, node, session, pr, failed_starts, failing_since, not_before, queued_at, created_at, updated_at"
+const unitColumns = "key, weight, state, fingerprint, content, node, session, pr, failed_starts, failing_since, not_before, weighed_at, started_at, alive_at, asking_since, queued_at, created_at, updated_at"
 
 // Change runs fn in one transaction on the unit stored under key, nil if
 // there is none. It saves the unit and appends the event that fn returns;
@@ -194,17 +214,20 @@ func (db *DB) Pick(ctx context.Context, states []unit.State, fn func(units []uni
 func write(ctx context.Context, tx *sql.Tx, save *unit.Unit, event *unit.Event) error {
 	if save != nil {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO units (`+unitColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			INSERT INTO units (`+unitColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT (key) DO UPDATE SET
 			  weight = excluded.weight, state = excluded.state, fingerprint = excluded.fingerprint,
 			  content = excluded.content, node = excluded.node, session = excluded.session,
 			  pr = excluded.pr, failed_starts = excluded.failed_starts,
 			  failing_since = excluded.failing_since, not_before = excluded.not_before,
+			  weighed_at = excluded.weighed_at, started_at = excluded.started_at,
+			  alive_at = excluded.alive_at, asking_since = excluded.asking_since,
 			  queued_at = excluded.queued_at, created_at = excluded.created_at,
 			  updated_at = excluded.updated_at`,
 			save.Key.String(), int(save.Weight), string(save.State), save.Fingerprint, string(save.Content),
 			save.Node, save.Session, save.PR,
 			save.FailedStarts, millis(save.FailingSince), millis(save.NotBefore),
+			millis(save.Weighed), millis(save.Started), millis(save.Alive), millis(save.Asking),
 			millis(save.Queued), millis(save.Created), millis(save.Updated))
 		if err != nil {
 			return err
@@ -284,10 +307,12 @@ func scanUnit(row interface{ Scan(...any) error }) (unit.Unit, error) {
 		key, state, content      string
 		weight                   int
 		failingSince, notBefore  int64
+		weighed, started         int64
+		alive, asking            int64
 		queued, created, updated int64
 	)
 	err := row.Scan(&key, &weight, &state, &u.Fingerprint, &content, &u.Node, &u.Session, &u.PR,
-		&u.FailedStarts, &failingSince, &notBefore, &queued, &created, &updated)
+		&u.FailedStarts, &failingSince, &notBefore, &weighed, &started, &alive, &asking, &queued, &created, &updated)
 	if err != nil {
 		return unit.Unit{}, err
 	}
@@ -297,6 +322,8 @@ func scanUnit(row interface{ Scan(...any) error }) (unit.Unit, error) {
 	}
 	u.Key, u.Weight, u.State, u.Content = parsed, unit.Weight(weight), unit.State(state), []byte(content)
 	u.FailingSince, u.NotBefore = fromMillis(failingSince), fromMillis(notBefore)
+	u.Weighed, u.Started = fromMillis(weighed), fromMillis(started)
+	u.Alive, u.Asking = fromMillis(alive), fromMillis(asking)
 	u.Queued, u.Created, u.Updated = fromMillis(queued), fromMillis(created), fromMillis(updated)
 	return u, nil
 }

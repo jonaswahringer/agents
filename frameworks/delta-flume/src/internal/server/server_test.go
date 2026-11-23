@@ -1,15 +1,19 @@
 package server_test
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/jonaswahringer/delta-flume/src/internal/alert"
 	"github.com/jonaswahringer/delta-flume/src/internal/client"
 	"github.com/jonaswahringer/delta-flume/src/internal/gateway"
 	"github.com/jonaswahringer/delta-flume/src/internal/server"
@@ -22,7 +26,8 @@ import (
 // SQL and the JSON are tested too.
 type fixture struct {
 	*client.Client
-	url string
+	url    string
+	server *server.Server
 
 	mu  sync.Mutex
 	now time.Time
@@ -30,12 +35,19 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureWith(t, nil)
+}
+
+// newFixtureWith is a fixture whose server can send to channels.
+func newFixtureWith(t *testing.T, channels map[string]alert.Channel) *fixture {
+	t.Helper()
 	f := &fixture{now: time.Date(2026, 11, 20, 9, 0, 0, 0, time.UTC)}
 	db, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "flume.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	web := httptest.NewServer(server.New(db, f.clock, func(string, ...any) {}).Handler())
+	f.server = server.New(db, f.clock, func(string, ...any) {}, channels)
+	web := httptest.NewServer(f.server.Handler())
 	t.Cleanup(func() {
 		web.Close()
 		db.Close()
@@ -279,5 +291,80 @@ func TestWhatTheServerTurnsDown(t *testing.T) {
 	// The client hands the server's reason on as it is.
 	if _, err := f.Owner(t.Context(), "tiro", "vessel/maintenance/dependencies/x"); err == nil || err.Error() != "no unit of project tiro owns branch vessel/maintenance/dependencies/x" {
 		t.Errorf("owner of a stray branch: %v", err)
+	}
+}
+
+// inbox is an alert channel that keeps what it is sent.
+type inbox struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (i *inbox) Send(ctx context.Context, target alert.Target, a alert.Alert) (string, error) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	i.sent = append(i.sent, target.Repo+" "+a.Title())
+	return fmt.Sprintf("#%d", len(i.sent)), nil
+}
+
+func (i *inbox) wait(t *testing.T, n int) []string {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		i.mu.Lock()
+		sent := slices.Clone(i.sent)
+		i.mu.Unlock()
+		if len(sent) >= n {
+			return sent
+		}
+	}
+	t.Fatalf("%d alerts were sent in 5s, want %d", len(i.sent), n)
+	return nil
+}
+
+// From a node's report to an alert in the channel its instance names: a
+// session that asks for an answer, then one that goes silent.
+func TestTheWatcherAlertsThroughTheInstancesChannels(t *testing.T) {
+	box := &inbox{}
+	f := newFixtureWith(t, map[string]alert.Channel{"inbox": box})
+	ctx, stop := context.WithCancel(t.Context())
+	defer stop()
+	go f.server.Run(ctx)
+
+	mini := report("mini", 1)
+	mini.Projects[0].Repo = "o/tiro"
+	mini.Projects[0].Alerts = map[string][]string{"maintenance/dependencies": {"inbox"}}
+	f.ask(t, mini)
+	f.submit(t, "lodash")
+	u := f.ask(t, mini).Units[0]
+	if err := f.Started(t.Context(), wire.Started{Key: u.Key, Node: "mini", Session: "s1"}); err != nil {
+		t.Fatal(err)
+	}
+
+	mini.Sessions = []wire.Session{{Key: u.Key, Session: "s1", Asking: true}}
+	f.ask(t, mini)
+	f.ask(t, mini) // still asking: no second alert
+	if sent := box.wait(t, 1); sent[0] != "o/tiro flume: maintenance/tiro/dependencies/lodash is waiting for a human" {
+		t.Errorf("alert = %q", sent[0])
+	}
+
+	mini.Sessions[0].Asking, mini.Sessions[0].QuietSeconds = false, 60
+	f.ask(t, mini)
+	f.later(20 * time.Minute)
+	if err := f.server.Watch(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if sent := box.wait(t, 2); len(sent) != 2 || !strings.HasSuffix(sent[1], "lodash is stuck") {
+		t.Errorf("alerts = %q, want a second one for stuck", sent)
+	}
+	if got := subjects(f.ask(t, mini)); got != "" {
+		t.Errorf("mini still has %q; a dead letter takes no room", got)
+	}
+	events, _ := f.Events(t.Context(), 0)
+	var kinds []string
+	for _, e := range events {
+		kinds = append(kinds, e.Kind)
+	}
+	if got := strings.Join(kinds, ","); !strings.Contains(got, "asking,alert,answered,stuck,alert") {
+		t.Errorf("record = %s", got)
 	}
 }

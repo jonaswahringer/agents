@@ -3,6 +3,7 @@ package gateway_test
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -284,28 +285,29 @@ func TestAssignsAtOnce(t *testing.T) {
 	}
 }
 
-func TestPaused(t *testing.T) {
+func TestReadInstance(t *testing.T) {
 	root := t.TempDir()
 	dir := filepath.Join(root, ".delta-flume", "vessels", "maintenance")
 	os.MkdirAll(dir, 0o755)
 	for name, tc := range map[string]struct {
 		content string
-		want    bool
+		want    gateway.Instance
 	}{
-		"paused":       {"---\nvessel: maintenance\nstatus: paused\n---\n# x\n", true},
-		"active":       {"---\nvessel: maintenance\nstatus: active\n---\n", false},
-		"spaced":       {"---\nstatus:   paused  \n---\n", true},
-		"no-status":    {"---\nvessel: maintenance\n---\nstatus: paused\n", false},
-		"no-front":     {"# Maintenance\n\nstatus: paused\n", false},
-		"empty":        {"", false},
-		"unterminated": {"---\nvessel: x\n", false},
+		"paused":       {"---\nvessel: maintenance\nstatus: paused\n---\n# x\n", gateway.Instance{Paused: true}},
+		"active":       {"---\nvessel: maintenance\nstatus: active\n---\n", gateway.Instance{}},
+		"spaced":       {"---\nstatus:   paused  \n---\n", gateway.Instance{Paused: true}},
+		"no-status":    {"---\nvessel: maintenance\n---\nstatus: paused\n", gateway.Instance{}},
+		"no-front":     {"# Maintenance\n\nstatus: paused\n", gateway.Instance{}},
+		"empty":        {"", gateway.Instance{}},
+		"unterminated": {"---\nvessel: x\n", gateway.Instance{}},
+		"alerts":       {"---\nalerts: github-issue, mail ,\n---\n", gateway.Instance{Alerts: []string{"github-issue", "mail"}}},
 	} {
 		os.WriteFile(filepath.Join(dir, name+".md"), []byte(tc.content), 0o644)
-		if got, err := gateway.Paused(root, "maintenance", name); err != nil || got != tc.want {
-			t.Errorf("%s: paused %v, err %v; want %v", name, got, err, tc.want)
+		if got, err := gateway.ReadInstance(root, "maintenance", name); err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: %+v, err %v; want %+v", name, got, err, tc.want)
 		}
 	}
-	if got, err := gateway.Paused(root, "maintenance", "missing"); err != nil || got {
-		t.Errorf("a project without the file: paused %v, err %v; want not paused", got, err)
+	if got, err := gateway.ReadInstance(root, "maintenance", "missing"); err != nil || !reflect.DeepEqual(got, gateway.Instance{}) {
+		t.Errorf("a project without the file: %+v, err %v; want active with no channels", got, err)
 	}
 }

@@ -51,6 +51,16 @@ type Unit struct {
 	FailingSince time.Time `json:"failing_since,omitzero"`
 	// NotBefore is the earliest time the next start may be tried.
 	NotBefore time.Time `json:"not_before,omitzero"`
+	// Weighed is when the unit last got its weight. The watcher raises the
+	// weight of a unit that has waited long since then.
+	Weighed time.Time `json:"weighed,omitzero"`
+	// Started is when its agent last started.
+	Started time.Time `json:"started,omitzero"`
+	// Alive is the last sign of life from its session: when the node last
+	// saw it change. The watcher calls a session that stays silent stuck.
+	Alive time.Time `json:"alive,omitzero"`
+	// Asking is since when its session waits for a human's answer.
+	Asking time.Time `json:"asking,omitzero"`
 	// Queued is when the unit last entered the queue.
 	Queued  time.Time `json:"queued"`
 	Created time.Time `json:"created"`

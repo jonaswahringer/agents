@@ -28,6 +28,8 @@ func sample(t *testing.T) unit.Unit {
 		Content: []byte(`{"a":1}`), Fingerprint: "abc",
 		Node: "mini", Session: "thread-1", PR: "https://example.test/pr/1",
 		FailedStarts: 2, FailingSince: at.Add(-2 * time.Minute), NotBefore: at.Add(4 * time.Minute),
+		Weighed: at.Add(-3 * time.Minute), Started: at.Add(-4 * time.Minute),
+		Alive: at.Add(-5 * time.Minute), Asking: at.Add(-6 * time.Minute),
 		Queued: at, Created: at.Add(-time.Hour), Updated: at.Add(time.Second),
 	}
 }
@@ -126,5 +128,46 @@ func TestAFileFromANewerFlumeIsRefused(t *testing.T) {
 
 	if _, err := Open(ctx, path); err == nil || !strings.Contains(err.Error(), "newer flume") {
 		t.Errorf("err = %v, want a refusal that names a newer flume", err)
+	}
+}
+
+// A file from flume's first schema gets the new columns and keeps its units.
+func TestAnOlderFileIsBroughtUpToDate(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flume.db")
+	raw, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = raw.Exec(`
+CREATE TABLE units (
+  key TEXT PRIMARY KEY, weight INTEGER NOT NULL, state TEXT NOT NULL,
+  fingerprint TEXT NOT NULL, content TEXT NOT NULL, node TEXT NOT NULL,
+  session TEXT NOT NULL, pr TEXT NOT NULL, failed_starts INTEGER NOT NULL,
+  failing_since INTEGER NOT NULL, not_before INTEGER NOT NULL,
+  queued_at INTEGER NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
+CREATE TABLE events (id INTEGER PRIMARY KEY, at INTEGER NOT NULL, key TEXT NOT NULL, kind TEXT NOT NULL, detail TEXT NOT NULL);
+INSERT INTO units VALUES ('maintenance/tiro/dependencies/lodash', 3, 'queued', 'f', '{}', '', '', '', 0, 0, 0, 1, 1, 1);
+PRAGMA user_version = 1;`)
+	raw.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	units, err := db.Units(ctx)
+	if err != nil || len(units) != 1 || units[0].Weight != unit.High || !units[0].Alive.IsZero() {
+		t.Fatalf("units after the upgrade = %+v, err %v", units, err)
+	}
+	u := units[0]
+	u.Alive = time.Date(2026, 11, 23, 9, 0, 0, 0, time.UTC)
+	if err := db.Change(ctx, u.Key, func(*unit.Unit) (*unit.Unit, *unit.Event, error) { return &u, nil, nil }); err != nil {
+		t.Fatal(err)
+	}
+	if units, _ := db.Units(ctx); !units[0].Alive.Equal(u.Alive) {
+		t.Errorf("alive = %v, want %v", units[0].Alive, u.Alive)
 	}
 }

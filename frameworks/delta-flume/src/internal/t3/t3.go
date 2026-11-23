@@ -49,6 +49,37 @@ func (c CLI) Start(ctx context.Context, job agent.Job) (string, error) {
 	return started.ThreadID, nil
 }
 
+// Look reads a thread's state with "t3 thread show". A thread with an active
+// run is busy, and one with a pending request waits for a human.
+func (c CLI) Look(ctx context.Context, thread string) (agent.Look, error) {
+	out, err := c.run(ctx, "", "", "thread", "show", "--json", "--messages", "0", thread)
+	if err != nil {
+		return agent.Look{}, err
+	}
+	return parseShow(out)
+}
+
+func parseShow(out []byte) (agent.Look, error) {
+	var shown struct {
+		Thread *struct {
+			Status              string    `json:"status"`
+			ActiveRunID         *string   `json:"activeRunId"`
+			PendingRequestCount int       `json:"pendingRequestCount"`
+			UpdatedAt           time.Time `json:"updatedAt"`
+		} `json:"thread"`
+	}
+	if err := json.Unmarshal(out, &shown); err != nil || shown.Thread == nil {
+		return agent.Look{}, fmt.Errorf("t3 thread show printed no thread: %q", out)
+	}
+	t := shown.Thread
+	return agent.Look{
+		Busy:    t.ActiveRunID != nil && *t.ActiveRunID != "",
+		Asking:  t.PendingRequestCount > 0,
+		Changed: t.UpdatedAt,
+		Status:  t.Status,
+	}, nil
+}
+
 // Send gives a thread a new message. A busy thread gets it as its next turn.
 func (c CLI) Send(ctx context.Context, thread, message string) error {
 	_, err := c.run(ctx, "", message, "thread", "send", "--json", thread, "-")

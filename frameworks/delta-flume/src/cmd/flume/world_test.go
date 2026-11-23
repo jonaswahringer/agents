@@ -33,7 +33,7 @@ func newWorld(t *testing.T) *world {
 	if err != nil {
 		t.Fatal(err)
 	}
-	control := server.New(db, w.clock, w.logf)
+	control := server.New(db, w.clock, w.logf, nil)
 	web := httptest.NewServer(control.Handler())
 	t.Cleanup(func() {
 		web.Close()

@@ -78,7 +78,7 @@ func checkRefFormat(t *testing.T, branch string) {
 }
 
 func TestWeight(t *testing.T) {
-	for _, s := range []string{"low", "normal", "high", "critical"} {
+	for _, s := range []string{"none", "low", "normal", "high", "critical"} {
 		w, err := ParseWeight(s)
 		if err != nil {
 			t.Fatalf("ParseWeight(%q): %v", s, err)
@@ -87,8 +87,12 @@ func TestWeight(t *testing.T) {
 			t.Errorf("ParseWeight(%q).String() = %q", s, w.String())
 		}
 	}
-	if !(Low < Normal && Normal < High && High < Critical) {
-		t.Error("weights must sort from low to critical")
+	if !(None < Low && Low < Normal && Normal < High && High < Critical) {
+		t.Error("weights must sort from none to critical")
+	}
+	// A unit line without a weight has not been weighed.
+	if w, err := ParseWeight(""); err != nil || w != None {
+		t.Errorf(`ParseWeight("") = %v, %v; want none`, w, err)
 	}
 	if _, err := ParseWeight("urgent"); err == nil {
 		t.Error(`ParseWeight("urgent") must fail`)

@@ -21,6 +21,25 @@ type Report struct {
 	// WaitSeconds is how long the server may hold the question open when it
 	// has nothing new.
 	WaitSeconds int `json:"wait_seconds"`
+	// Sessions is what the node sees of the sessions of the units it runs.
+	Sessions []Session `json:"sessions,omitempty"`
+}
+
+// Session is what a node sees of the session of a unit it runs. The server
+// judges it by its own clock, so times are spans, not dates.
+type Session struct {
+	Key     unit.Key `json:"key"`
+	Session string   `json:"session"`
+	// Busy: the agent is working on a turn now.
+	Busy bool `json:"busy,omitempty"`
+	// Asking: the session waits for a human's answer.
+	Asking bool `json:"asking,omitempty"`
+	// QuietSeconds is how long ago the session last changed.
+	QuietSeconds int64 `json:"quiet_seconds"`
+	// Status is the provider's word for the session's state.
+	Status string `json:"status,omitempty"`
+	// Error says why the node could not look. Then nothing else is known.
+	Error string `json:"error,omitempty"`
 }
 
 // Project is one project on a node.
@@ -29,6 +48,12 @@ type Project struct {
 	// Paused names the vessel instances this project has paused, each as
 	// <vessel>/<instance>.
 	Paused []string `json:"paused,omitempty"`
+	// Repo is the project's repository on GitHub, as owner/name, if it has
+	// one.
+	Repo string `json:"repo,omitempty"`
+	// Alerts names the alert channels of each instance that names any, by
+	// <vessel>/<instance>.
+	Alerts map[string][]string `json:"alerts,omitempty"`
 }
 
 // Desired is everything a node should be working on: the units it should

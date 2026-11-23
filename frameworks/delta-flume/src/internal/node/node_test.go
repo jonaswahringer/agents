@@ -71,6 +71,17 @@ type agents struct {
 	jobs  []agent.Job
 	sends []string
 	err   error
+	// looks is what each session shows; a session missing from it cannot
+	// be looked at.
+	looks map[string]agent.Look
+}
+
+func (a *agents) Look(ctx context.Context, session string) (agent.Look, error) {
+	look, ok := a.looks[session]
+	if !ok {
+		return agent.Look{}, errors.New("no such session")
+	}
+	return look, nil
 }
 
 func (a *agents) Start(ctx context.Context, job agent.Job) (string, error) {
@@ -257,5 +268,38 @@ func TestANodeKeepsAsking(t *testing.T) {
 	}
 	if want := "no answer from the flume server; trying again in 1s"; len(f.log) != 1 || f.log[0] != want {
 		t.Errorf("the node's log %q, want %q", f.log, want)
+	}
+}
+
+// With each question the node says what it sees of the sessions it runs,
+// and what its projects' instance files say.
+func TestANodeReportsItsSessions(t *testing.T) {
+	lodash, minimist := starting(t, "maintenance/tiro/dependencies/lodash"), starting(t, "maintenance/tiro/dependencies/minimist")
+	lodash.State, lodash.Session = unit.Running, "s1"
+	minimist.State, minimist.Session = unit.Running, "s2"
+	f := newFixture(t, lodash, minimist)
+	now := time.Date(2026, 11, 23, 9, 0, 0, 0, time.UTC)
+	f.Now = func() time.Time { return now }
+	f.agents.looks = map[string]agent.Look{"s1": {Busy: true, Asking: true, Changed: now.Add(-90 * time.Second), Status: "running"}}
+	dir := filepath.Join(f.root, ".delta-flume", "vessels", "maintenance")
+	os.MkdirAll(dir, 0o755)
+	os.WriteFile(filepath.Join(dir, "dependencies.md"), []byte("---\nvessel: maintenance\nalerts: github-issue\n---\n"), 0o644)
+
+	ctx := t.Context()
+	f.Step(ctx, 0) // learns what runs here
+	f.Step(ctx, 0)
+	last := f.server.reports[len(f.server.reports)-1]
+	want := []wire.Session{
+		{Key: lodash.Key, Session: "s1", Busy: true, Asking: true, QuietSeconds: 90, Status: "running"},
+		{Key: minimist.Key, Session: "s2", Error: "no such session"},
+	}
+	if !reflect.DeepEqual(last.Sessions, want) {
+		t.Errorf("sessions = %+v\nwant %+v", last.Sessions, want)
+	}
+	if got := last.Projects[0].Alerts; !reflect.DeepEqual(got, map[string][]string{"maintenance/dependencies": {"github-issue"}}) {
+		t.Errorf("alerts = %v", got)
+	}
+	if len(f.server.reports[0].Sessions) != 0 {
+		t.Errorf("before its first answer the node reported %+v", f.server.reports[0].Sessions)
 	}
 }

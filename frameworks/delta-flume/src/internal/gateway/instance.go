@@ -13,31 +13,53 @@ import (
 // its top folder: one file per instance, in a folder per vessel type.
 const InstanceDir = ".delta-flume/vessels"
 
-// Paused reports whether a project has paused an instance of a vessel: the
-// front matter of its .delta-flume/vessels/<vessel>/<instance>.md says
-// "status: paused". A project without that file has not paused it.
-func Paused(root, vessel, instance string) (bool, error) {
+// Instance is what flume reads from an instance file's front matter.
+type Instance struct {
+	// Paused: "status: paused". A paused instance starts nothing.
+	Paused bool
+	// Alerts names the channels that tell a human about the instance's
+	// units, such as "alerts: github-issue". Several are separated by commas.
+	Alerts []string
+}
+
+// ReadInstance reads the front matter of a project's
+// .delta-flume/vessels/<vessel>/<instance>.md. A project without that file
+// has an active instance with no alert channels.
+func ReadInstance(root, vessel, instance string) (Instance, error) {
+	var in Instance
 	file, err := os.Open(filepath.Join(root, filepath.FromSlash(InstanceDir), vessel, instance+".md"))
 	if errors.Is(err, fs.ErrNotExist) {
-		return false, nil
+		return in, nil
 	}
 	if err != nil {
-		return false, err
+		return in, err
 	}
 	defer file.Close()
 
 	lines := bufio.NewScanner(file)
 	if !lines.Scan() || strings.TrimSpace(lines.Text()) != "---" {
-		return false, lines.Err()
+		return in, lines.Err()
 	}
 	for lines.Scan() {
 		line := strings.TrimSpace(lines.Text())
 		if line == "---" {
 			break
 		}
-		if name, value, ok := strings.Cut(line, ":"); ok && strings.TrimSpace(name) == "status" {
-			return strings.TrimSpace(value) == "paused", nil
+		name, value, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		switch strings.TrimSpace(name) {
+		case "status":
+			in.Paused = value == "paused"
+		case "alerts":
+			for _, channel := range strings.Split(value, ",") {
+				if channel = strings.TrimSpace(channel); channel != "" {
+					in.Alerts = append(in.Alerts, channel)
+				}
+			}
 		}
 	}
-	return false, lines.Err()
+	return in, lines.Err()
 }

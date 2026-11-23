@@ -75,8 +75,8 @@ func outcomes(counts map[gateway.Outcome]int) string {
 	return strings.Join(parts, ", ")
 }
 
-// readSubmissions reads one unit per line. Each is a JSON object with a key
-// and a weight. The whole object is the unit's content, and flume reads
+// readSubmissions reads one unit per line. Each is a JSON object with a key,
+// and a weight unless nothing has weighed it yet. The whole object is the unit's content, and flume reads
 // nothing else in it.
 func readSubmissions(stdin io.Reader) ([]gateway.Submission, error) {
 	var submissions []gateway.Submission

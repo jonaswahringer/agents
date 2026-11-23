@@ -55,6 +55,31 @@ func (r Repo) Top(ctx context.Context) (string, error) {
 	return r.git(ctx, "rev-parse", "--show-toplevel")
 }
 
+// GitHub is the checkout's repository on GitHub, as owner/name, read from
+// the origin remote. It is "" when origin is not on GitHub.
+func (r Repo) GitHub(ctx context.Context) (string, error) {
+	url, err := r.git(ctx, "config", "--get", "remote.origin.url")
+	if err != nil {
+		return "", err
+	}
+	return GitHubName(url), nil
+}
+
+// GitHubName is owner/name for a GitHub remote URL, such as
+// git@github.com:owner/name.git or https://github.com/owner/name, and ""
+// for any other URL.
+func GitHubName(url string) string {
+	for _, prefix := range []string{"git@github.com:", "ssh://git@github.com/", "https://github.com/", "http://github.com/"} {
+		if path, ok := strings.CutPrefix(url, prefix); ok {
+			path = strings.TrimSuffix(strings.TrimSuffix(path, "/"), ".git")
+			if owner, name, ok := strings.Cut(path, "/"); ok && owner != "" && name != "" && !strings.Contains(name, "/") {
+				return path
+			}
+		}
+	}
+	return ""
+}
+
 // DefaultBranch is the branch the remote calls its default, such as main.
 func (r Repo) DefaultBranch(ctx context.Context) (string, error) {
 	head, err := r.git(ctx, "symbolic-ref", "--short", "refs/remotes/origin/HEAD")

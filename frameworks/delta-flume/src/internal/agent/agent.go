@@ -3,7 +3,10 @@
 // replaced without touching the gateway or the commands.
 package agent
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Job is what a provider needs to start the agent of one unit.
 type Job struct {
@@ -30,6 +33,22 @@ type Provider interface {
 	// Send gives a session a new message. The session keeps its branch and
 	// its checkout.
 	Send(ctx context.Context, session, message string) error
+	// Look tells what can be seen of a session now.
+	Look(ctx context.Context, session string) (Look, error)
+}
+
+// Look is what a provider can see of a session. It shows whether the agent
+// is alive and whether it waits for a human; the watcher judges.
+type Look struct {
+	// Busy: the agent is working on a turn now.
+	Busy bool
+	// Asking: the session waits for a human's answer, such as an approval.
+	Asking bool
+	// Changed is when the session last changed.
+	Changed time.Time
+	// Status is the provider's own word for the session's state, for the
+	// record.
+	Status string
 }
 
 // Rules keep an agent from publishing on its own. They are a file in the

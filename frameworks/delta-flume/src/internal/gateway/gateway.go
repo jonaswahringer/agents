@@ -96,7 +96,7 @@ func (g *Gateway) Accept(ctx context.Context, s Submission) (Decision, error) {
 			u.State, u.Queued = unit.Queued, now
 			forgetFailedStarts(&u)
 		}
-		u.Weight, u.Content, u.Fingerprint, u.Updated = s.Weight, content, fingerprint, now
+		u.Weight, u.Content, u.Fingerprint, u.Weighed, u.Updated = s.Weight, content, fingerprint, now, now
 		return &u, event, nil
 	})
 	if err != nil {
@@ -123,7 +123,7 @@ func decide(old *unit.Unit, fingerprint string) (Outcome, string) {
 }
 
 // Queue returns the units waiting to start, in start order: heaviest first,
-// then longest waiting.
+// then longest waiting. A unit with no weight comes last.
 func (g *Gateway) Queue(ctx context.Context) ([]unit.Unit, error) {
 	units, err := g.store.Units(ctx, unit.Queued)
 	if err != nil {
@@ -228,6 +228,7 @@ func (g *Gateway) Started(ctx context.Context, key unit.Key, node, session strin
 			return nil, nil, err
 		}
 		old.State, old.Session, old.Updated = unit.Running, session, now
+		old.Started, old.Alive, old.Asking = now, now, time.Time{}
 		forgetFailedStarts(old)
 		return old, &unit.Event{At: now, Key: key.String(), Kind: "started", Detail: fmt.Sprintf("on %s in session %s", node, session)}, nil
 	})
