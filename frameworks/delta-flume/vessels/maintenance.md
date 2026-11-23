@@ -22,6 +22,7 @@ Set by a script when the finding is made (d). v0:
 
 | Finding | Weight |
 |---|---|
+| A malicious package | critical, whatever its rating |
 | Security advisory | its CVSS rating: Critical → critical, High → high, Medium → normal, Low → low |
 | A dependency or runtime past its end of life, with no more security fixes | high |
 | A major version behind | normal |
@@ -69,19 +70,19 @@ Landed: a human merged the PR. Closed: a human rejected it, with a reason in the
 
 ## Mechanism
 
-The markdown guides the agent loop. Everything else is enforced outside the agent, with GitHub as the boundary for now.
+The markdown guides the agent loop. Everything else is enforced outside the agent, by the `flume` command and by GitHub.
 
 | Part | Enforced by | Kind |
 |---|---|---|
-| Trigger | a scheduled job per instance (cron or a GitHub Action), listed in the project's `.delta-flume/vessels/README.md` | d |
-| Weight | a script, when the finding is made | d |
-| Accept | a script: `gh pr list` searches for the key, open or closed | d |
-| Start | a script: is the instance paused (`status` in the project's `.delta-flume/vessels/maintenance/<instance>.md`) or overloaded? If so, the finding waits in the queue | d |
+| Trigger | `flume scan <project> \| flume submit` scans a project and hands the findings to Accept. Nothing runs it on a schedule yet; the project's `.delta-flume/vessels/README.md` lists each instance's trigger | d |
+| Weight | `flume scan`, when the finding is made | d |
+| Accept | `flume submit`: remembers every finding by its key and declines one that brings nothing new | d |
+| Start | the flume server: it gives the finding to a node that has the project and has room, unless the instance is paused there (`status` in the project's `.delta-flume/vessels/maintenance/<instance>.md`). Otherwise the finding waits in the queue. A start that fails is tried again after a wait that grows, and after six hours the finding goes to dead letters | d |
 | Estimate | a script for dependency updates, an agent for the rest | d, s |
-| Agent loop | an agent CLI in a git worktree, guided by this file, the instance file, the project's `.delta-flume/vessels/README.md` and its AGENTS.md | s |
+| Agent loop | a T3 Code thread in a git worktree on the finding's branch, guided by this file, the instance file, the project's `.delta-flume/vessels/README.md` and its AGENTS.md. It publishes only through `flume push` and `flume pr` | s |
 | Verify | CI, then the project's runtime check, then a review agent | d, s |
 | Watcher | compares spend with the estimate; the job's time limit and a token cap enforce the ceiling | d |
 | Land | branch protection: a human approval is required | h |
 | Record | the PR | d |
 
-A database can be added later, once the vessel needs state that GitHub can't hold.
+The flume server keeps the queue and each finding's state in a SQLite file. The PR stays the record.
